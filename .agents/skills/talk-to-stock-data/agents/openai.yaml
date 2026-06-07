@@ -1,4 +1,4 @@
 interface:
   display_name: "Talk to Stock Data"
-  short_description: "Query local OHLCV data conversationally"
-  default_prompt: "Use $talk-to-stock-data to analyze local stock prices at a stored or derived timeframe."
+  short_description: "Query local prices and technical indicators"
+  default_prompt: "Use $talk-to-stock-data to analyze local stock prices and precalculated indicators at a stored or derived timeframe."

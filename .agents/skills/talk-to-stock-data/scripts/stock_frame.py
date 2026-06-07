@@ -16,6 +16,7 @@ PRICE_COLUMNS = [
     "close",
     "volume",
 ]
+INDICATOR_KEY_COLUMNS = ["symbol", "trade_timestamp"]
 FIXED_PATTERN = re.compile(r"^(?P<count>[1-9][0-9]*)(?P<unit>m|h|d)$")
 CALENDAR_INTERVALS = {"1wk": "1w", "1mo": "1mo", "3mo": "1q", "1y": "1y"}
 
@@ -57,6 +58,41 @@ def load_prices(
     return _resample(source, requested_interval), resolution
 
 
+def load_indicators(
+    interval: str,
+    indicators_root: str | Path,
+    symbols: list[str] | None,
+    start: datetime | None,
+    end: datetime | None,
+) -> pl.LazyFrame:
+    root = Path(indicators_root)
+    interval_dir = root / interval
+    if not interval_dir.is_dir() or not any(interval_dir.glob("*.parquet")):
+        raise StockFrameError(f"No indicators found for exact interval: {interval}")
+    frame = pl.scan_parquet(interval_dir / "*.parquet")
+    return _apply_filters(frame, symbols, start, end)
+
+
+def load_prices_with_indicators(
+    interval: str,
+    prices_root: str | Path,
+    indicators_root: str | Path,
+    symbols: list[str] | None,
+    start: datetime | None,
+    end: datetime | None,
+) -> pl.LazyFrame:
+    resolution = resolve_interval(interval, Path(prices_root))
+    if resolution.derived:
+        raise StockFrameError(
+            f"Cannot join precalculated indicators to derived interval: {interval}"
+        )
+    prices, _ = load_prices(interval, prices_root, symbols, start, end)
+    indicators = load_indicators(interval, indicators_root, symbols, start, end)
+    return prices.join(indicators, on=INDICATOR_KEY_COLUMNS, how="inner").sort(
+        INDICATOR_KEY_COLUMNS
+    )
+
+
 def resolve_interval(requested_interval: str, prices_root: Path) -> Resolution:
     available = discover_intervals(prices_root)
     if requested_interval in available:
@@ -81,6 +117,15 @@ def _scan_source(
 ) -> pl.LazyFrame:
     pattern = prices_root / interval / "*.parquet"
     frame = pl.scan_parquet(pattern).select(PRICE_COLUMNS)
+    return _apply_filters(frame, symbols, start, end)
+
+
+def _apply_filters(
+    frame: pl.LazyFrame,
+    symbols: list[str] | None,
+    start: datetime | None,
+    end: datetime | None,
+) -> pl.LazyFrame:
     if symbols is not None:
         if not symbols:
             raise StockFrameError("Symbol filter must not be empty")

@@ -2,8 +2,11 @@
 
 ## Storage
 
-- Root: `market-data/prices`
-- Layout: `market-data/prices/<interval>/<symbol>.parquet`
+- Price root: `market-data/prices`
+- Price layout: `market-data/prices/<interval>/<symbol>.parquet`
+- Indicator root: `market-data/indicators`
+- Indicator layout: `market-data/indicators/<interval>/<symbol>.parquet`
+- Indicator metadata: `market-data/indicators/<interval>/<symbol>.metadata.json`
 - Time zone: `Asia/Kolkata`
 - Data is raw, unadjusted OHLCV.
 
@@ -16,6 +19,33 @@
 | `low` | `Float64` | Minimum price |
 | `close` | `Float64` | Last price |
 | `volume` | `Int64` | Traded volume |
+
+## Precalculated Indicators
+
+Indicators derive from raw, unadjusted prices. Use them only for the exact interval
+directory containing them. Never resample precalculated indicators or join them to a
+derived timeframe.
+
+Indicator files contain only rows after full 365-calendar-day history and after every
+indicator is valid. Files contain no null, NaN, or infinite values. Missing indicator
+files usually mean insufficient history or that the symbol was not part of the selected
+interval update. Inner joins therefore exclude unavailable symbols and early history;
+disclose these exclusions.
+
+| Columns | Meaning |
+|---|---|
+| `ema_10`, `ema_20`, `ema_50`, `ema_100`, `ema_200` | Close EMAs |
+| `volume_ema_20`, `relative_volume_20` | Volume EMA and `volume / volume_ema_20` |
+| `rsi_14` | Standard Wilder RSI |
+| `atr_14`, `atr_percent_14` | Standard Wilder ATR and `atr_14 / close * 100` |
+| `macd_12_26`, `macd_signal_9`, `macd_histogram` | Standard MACD |
+| `adx_14`, `plus_di_14`, `minus_di_14` | Standard Wilder trend strength/direction |
+| `band_upper_20_2`, `band_middle_20`, `band_lower_20_2`, `band_width_20_2` | EMA-20-centered bands using 20-period standard deviation |
+| `roc_20`, `obv` | Rate of change and on-balance volume |
+| `trailing_365d_high`, `trailing_365d_low`, `distance_from_365d_high_percent` | True trailing 365-calendar-day context |
+
+No simple moving averages are stored. Metadata contains a source-price fingerprint used
+by ingestion to detect stale output; query code normally reads Parquet, not metadata.
 
 ## Timeframe Resolution
 
@@ -37,6 +67,10 @@ Examples:
 - derive `90m` from `30m` when `1h` cannot divide evenly into `90m`.
 
 Use `scripts/stock_frame.py` to enforce these rules.
+
+For derived timeframe indicator requests, derive OHLCV with `load_prices()` and calculate
+the requested indicator on demand. State formula and that the result was not
+precalculated.
 
 ## Performance
 
@@ -80,6 +114,7 @@ period-to-period returns, use N+1 closing prices.
 Raise a clear exception when:
 
 - `market-data/prices` is absent;
+- exact-interval precalculated indicators are requested but unavailable;
 - no stored interval can derive the requested timeframe;
 - a requested symbol or date range has no data;
 - required lookback observations are unavailable;
