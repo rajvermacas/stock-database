@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 
+from stock_data.indicator_service import IndicatorUpdater
 from stock_data.intervals import IntervalSpec
 from stock_data.normalization import normalize_symbol
 from stock_data.storage import PriceStore
@@ -46,11 +47,13 @@ class UpdateService:
         self,
         store: PriceStore,
         yahoo: YahooClient,
+        indicators: IndicatorUpdater | None,
         interval: IntervalSpec,
         initial_start: date,
     ) -> None:
         self.store = store
         self.yahoo = yahoo
+        self.indicators = indicators
         self.interval = interval
         self.initial_start = initial_start
 
@@ -68,8 +71,43 @@ class UpdateService:
         groups, results = self._plan(symbols, now.date(), start, end)
         for (request_start, request_end), group in groups.items():
             results.extend(self._process_group(group, request_start, request_end, now))
+        results = self._refresh_indicators(results)
         ordered = sorted(results, key=lambda result: symbols.index(result.symbol))
         return UpdateSummary(tuple(ordered))
+
+    def _refresh_indicators(self, results: list[SymbolResult]) -> list[SymbolResult]:
+        if self.indicators is None:
+            return results
+        return [self._refresh_symbol_indicators(result) for result in results]
+
+    def _refresh_symbol_indicators(self, result: SymbolResult) -> SymbolResult:
+        if result.status == SymbolStatus.FAILED:
+            return result
+        try:
+            refreshed = self.indicators.refresh(
+                result.symbol, result.status == SymbolStatus.SUCCESS
+            )
+            status = SymbolStatus.SUCCESS if refreshed.changed else result.status
+            return SymbolResult(
+                result.symbol,
+                status,
+                result.downloaded_rows,
+                result.stored_rows,
+                None,
+            )
+        except Exception as exc:
+            LOGGER.exception(
+                "Indicator update failed symbol=%s interval=%s",
+                result.symbol,
+                self.interval.name,
+            )
+            return SymbolResult(
+                result.symbol,
+                SymbolStatus.FAILED,
+                result.downloaded_rows,
+                result.stored_rows,
+                str(exc),
+            )
 
     def _plan(
         self,
