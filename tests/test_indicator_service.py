@@ -1,9 +1,12 @@
 import logging
+from pathlib import Path
 
 import pytest
 
 from stock_data.indicator_service import IndicatorUpdateError, IndicatorUpdater
+from stock_data.indicator_storage import IndicatorStore
 from stock_data.intervals import get_interval
+from stock_data.storage import PriceStore
 from test_indicators import price_history
 
 
@@ -86,3 +89,18 @@ def test_storage_failure_includes_context() -> None:
     indicator_store.publish = lambda *args: (_ for _ in ()).throw(OSError("disk full"))
     with pytest.raises(IndicatorUpdateError, match="symbol=TCS.NS.*disk full"):
         updater.refresh("TCS.NS", prices_changed=False)
+
+
+def test_refresh_does_not_modify_price_file(tmp_path: Path) -> None:
+    interval = get_interval("1d")
+    price_store = PriceStore(tmp_path / "prices", interval)
+    price_store.write_atomic("TCS.NS", price_history())
+    price_path = price_store.path_for("TCS.NS")
+    original = price_path.read_bytes()
+    indicator_store = IndicatorStore(tmp_path / "indicators", interval)
+    IndicatorUpdater(price_store, indicator_store).refresh(
+        "TCS.NS", prices_changed=True
+    )
+    assert price_path.read_bytes() == original
+    assert indicator_store.path_for("TCS.NS").exists()
+    assert indicator_store.metadata_path_for("TCS.NS").exists()
