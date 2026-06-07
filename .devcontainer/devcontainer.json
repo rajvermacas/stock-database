@@ -1,0 +1,26 @@
+{
+  "name": "Python 3.12 with Claude & Gemini CLI",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+  "mounts": [
+    "type=bind,source=C:\\Projects,target=/root/projects"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "mhutchie.git-graph",
+        "eamodio.gitlens",
+        "openai.chatgpt",
+        "ms-python.python"
+      ]
+    }
+  },
+  "postCreateCommand": "echo 'Installing Claude CLI...' > /tmp/postcreate.log && curl -fsSL https://claude.ai/install.sh | bash 2>&1 | tee -a /tmp/postcreate.log && echo 'Installing other tools...' >> /tmp/postcreate.log && npm install -g @google/gemini-cli ccusage @openai/codex pyright @anthropic-ai/sandbox-runtime 2>&1 | tee -a /tmp/postcreate.log && echo 'Creating Codex config directory...' && mkdir -p /root/.codex && echo 'Refreshing terminal environment...' >> /tmp/postcreate.log && exec bash -c 'hash -r && export PATH=\"/usr/local/bin:/usr/bin:/bin:$PATH\" && echo \"PATH refreshed: $PATH\" >> /tmp/postcreate.log && which claude >> /tmp/postcreate.log 2>&1 && echo \"Running setup.sh...\" >> /tmp/postcreate.log && bash ./.devcontainer/setup.sh 2>&1 | tee -a /tmp/postcreate.log'",
+  "postStartCommand": "echo '=== Container Start Check ===' && if [ -f /tmp/setup-executed.marker ]; then echo 'Setup marker found:' && cat /tmp/setup-executed.marker | head -5; fi && if [ -f /home/vscode/setup-log.txt ]; then echo 'Setup log found at /home/vscode/setup-log.txt' && head -10 /home/vscode/setup-log.txt; elif [ -f /tmp/setup-log.txt ]; then echo 'Setup log found at /tmp/setup-log.txt' && head -10 /tmp/setup-log.txt; else echo 'WARNING: No setup log found - setup.sh may not have executed'; fi && echo '=== End Container Start Check ==='",
+  "remoteUser": "root"
+}
