@@ -11,3 +11,5 @@ batch_size = 50
 timeout_seconds = 30
 threads = true
 
+[indicators]
+enabled = true

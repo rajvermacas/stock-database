@@ -16,6 +16,8 @@ interval = "1d"
 batch_size = 50
 timeout_seconds = 30
 threads = true
+[indicators]
+enabled = true
 """
 
 
@@ -31,7 +33,9 @@ def test_load_config_resolves_paths(tmp_path: Path) -> None:
     config = load_config(path)
     assert config.paths.data_dir == (path.parent / "../market-data").resolve()
     assert config.paths.prices_dir == config.paths.data_dir / "prices"
+    assert config.paths.indicators_dir == config.paths.data_dir / "indicators"
     assert config.download.initial_start_date.isoformat() == "2000-01-01"
+    assert config.indicators.enabled is True
 
 
 @pytest.mark.parametrize(
@@ -41,6 +45,8 @@ def test_load_config_resolves_paths(tmp_path: Path) -> None:
         VALID.replace('interval = "1d"', 'interval = "2h"'),
         VALID.replace("batch_size = 50", "batch_size = 0"),
         VALID + "\nunknown = true\n",
+        VALID.replace("[indicators]\nenabled = true\n", ""),
+        VALID.replace("enabled = true\n", ""),
     ],
 )
 def test_load_config_rejects_invalid_values(tmp_path: Path, text: str) -> None:

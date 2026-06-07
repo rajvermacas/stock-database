@@ -27,6 +27,10 @@ class PathsConfig(StrictModel):
         return self.data_dir / "prices"
 
     @property
+    def indicators_dir(self) -> Path:
+        return self.data_dir / "indicators"
+
+    @property
     def logs_dir(self) -> Path:
         return self.data_dir / "logs"
 
@@ -48,10 +52,15 @@ class YahooConfig(StrictModel):
         return value
 
 
+class IndicatorsConfig(StrictModel):
+    enabled: bool
+
+
 class AppConfig(StrictModel):
     paths: PathsConfig
     download: DownloadConfig
     yahoo: YahooConfig
+    indicators: IndicatorsConfig
 
     def resolve_relative_paths(self, base: Path) -> Self:
         paths = self.paths.model_copy(

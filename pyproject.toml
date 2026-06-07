@@ -7,6 +7,7 @@ name = "stock-data-repository"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+  "TA-Lib>=0.6",
   "polars>=1.0",
   "pydantic>=2.0",
   "typer>=0.12",
@@ -28,4 +29,3 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-
