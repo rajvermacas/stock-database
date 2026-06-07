@@ -8,5 +8,6 @@ build/
 *.egg-info/
 
 market-data/prices/
+market-data/indicators/
 market-data/logs/
 
