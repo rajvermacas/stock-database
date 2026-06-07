@@ -39,12 +39,16 @@ def split_batch_frame(
     if frame.empty:
         return {}
     if not isinstance(frame.columns, pd.MultiIndex):
-        return {symbols[0]: frame} if len(symbols) == 1 else {}
+        if len(symbols) != 1 or frame.dropna(how="all").empty:
+            return {}
+        return {symbols[0]: frame}
     output: dict[str, pd.DataFrame] = {}
     for symbol in symbols:
         for level in range(frame.columns.nlevels):
             if symbol in frame.columns.get_level_values(level):
-                output[symbol] = frame.xs(symbol, axis=1, level=level, drop_level=True)
+                symbol_frame = frame.xs(symbol, axis=1, level=level, drop_level=True)
+                if not symbol_frame.dropna(how="all").empty:
+                    output[symbol] = symbol_frame
                 break
     return output
 

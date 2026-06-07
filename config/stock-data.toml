@@ -3,7 +3,7 @@ data_dir = "../market-data"
 symbols_file = "../market-data/metadata/symbols.csv"
 
 [download]
-initial_start_date = "2020-01-01"
+initial_start_date = "2015-01-01"
 
 [yahoo]
 interval = "1d"
