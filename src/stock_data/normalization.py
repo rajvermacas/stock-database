@@ -1,14 +1,24 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime
 
 import pandas as pd
 import polars as pl
 
-CANONICAL_COLUMNS = ["symbol", "trade_date", "open", "high", "low", "close", "volume"]
+from stock_data.intervals import IST, IntervalSpec
+
+CANONICAL_COLUMNS = [
+    "symbol",
+    "trade_timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+]
 CANONICAL_SCHEMA = {
     "symbol": pl.String,
-    "trade_date": pl.Date,
+    "trade_timestamp": pl.Datetime(time_unit="us", time_zone="Asia/Kolkata"),
     "open": pl.Float64,
     "high": pl.Float64,
     "low": pl.Float64,
@@ -38,26 +48,30 @@ def split_batch_frame(
     return output
 
 
-def normalize_symbol(symbol: str, frame: pd.DataFrame, cutoff: date) -> pl.DataFrame:
+def normalize_symbol(
+    symbol: str, frame: pd.DataFrame, interval: IntervalSpec, now: datetime
+) -> pl.DataFrame:
     try:
-        normalized = _prepare_pandas(frame)
+        prepared = _prepare_pandas(frame)
+        timestamps = _timestamps_to_ist(prepared["trade_timestamp"])
         result = pl.DataFrame(
             {
-                "symbol": [symbol] * len(normalized),
-                "trade_date": pd.to_datetime(
-                    normalized["trade_date"]
-                ).dt.date.to_list(),
-                "open": normalized["Open"].to_list(),
-                "high": normalized["High"].to_list(),
-                "low": normalized["Low"].to_list(),
-                "close": normalized["Close"].to_list(),
-                "volume": normalized["Volume"].to_list(),
+                "symbol": [symbol] * len(prepared),
+                "trade_timestamp": timestamps,
+                "open": prepared["Open"].to_list(),
+                "high": prepared["High"].to_list(),
+                "low": prepared["Low"].to_list(),
+                "close": prepared["Close"].to_list(),
+                "volume": prepared["Volume"].to_list(),
             },
             schema=CANONICAL_SCHEMA,
             strict=True,
         )
-        result = result.filter(pl.col("trade_date") <= cutoff)
-        result = result.unique(["symbol", "trade_date"], keep="last").sort("trade_date")
+        complete = [interval.is_complete(value, now) for value in timestamps]
+        result = result.filter(pl.Series(complete))
+        result = result.unique(["symbol", "trade_timestamp"], keep="last").sort(
+            "trade_timestamp"
+        )
         _validate_result(result)
         return result
     except (KeyError, TypeError, ValueError, pl.exceptions.PolarsError) as exc:
@@ -71,7 +85,13 @@ def _prepare_pandas(frame: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"missing columns: {sorted(missing)}")
     prepared = frame.reset_index()
-    return prepared.rename(columns={prepared.columns[0]: "trade_date"})
+    return prepared.rename(columns={prepared.columns[0]: "trade_timestamp"})
+
+
+def _timestamps_to_ist(values: pd.Series) -> list[datetime]:
+    index = pd.DatetimeIndex(pd.to_datetime(values))
+    localized = index.tz_localize(IST) if index.tz is None else index.tz_convert(IST)
+    return localized.to_pydatetime().tolist()
 
 
 def _validate_result(frame: pl.DataFrame) -> None:
