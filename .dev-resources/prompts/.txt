@@ -1,0 +1,294 @@
+# Stock Market Data Repository - Requirements Document
+
+## Problem Statement
+
+Build a local stock market data repository for Indian equities using Yahoo Finance as the data source.
+
+The system should download and maintain historical OHLCV data for NSE-listed stocks and store it locally in an analytics-friendly format. The primary objective is to create a foundation for future stock screening, factor calculation, momentum analysis, and backtesting.
+
+The initial version should focus only on data ingestion and storage. No backtesting, charting, or screening functionality is required at this stage.
+
+---
+
+# Objectives
+
+1. Download historical stock price data from Yahoo Finance.
+2. Maintain a local repository of stock data.
+3. Support incremental daily updates.
+4. Store data in a format optimized for analytics workloads.
+5. Keep the architecture simple and lightweight.
+6. Prepare the foundation for future momentum and value-investing research.
+
+---
+
+# Technology Stack
+
+## Language
+
+Python 3.12+
+
+## Market Data Source
+
+Yahoo Finance via yfinance library
+
+## Data Processing
+
+Polars
+
+Reason:
+
+* Faster than Pandas
+* Simple API
+* Native Parquet support
+
+## Storage Format
+
+Parquet
+
+Reason:
+
+* Columnar format
+* Highly compressed
+* Fast reads
+* Industry standard
+
+## Future Query Layer
+
+DuckDB
+
+Note:
+DuckDB is not required in the initial implementation but the file structure should be compatible with future DuckDB querying.
+
+---
+
+# Scope
+
+## In Scope
+
+### Historical Data Download
+
+Download:
+
+* Open
+* High
+* Low
+* Close
+* Volume
+
+for NSE stocks.
+
+Example ticker format:
+
+* RELIANCE.NS
+* TCS.NS
+* INFY.NS
+
+### Incremental Updates
+
+The system should:
+
+1. Detect the latest available date in local storage.
+2. Download only missing data.
+3. Merge new records.
+4. Remove duplicates.
+5. Rewrite the Parquet file.
+
+### Symbol Management
+
+Maintain a symbol list.
+
+Initial implementation may use:
+
+symbols.csv
+
+Example:
+
+RELIANCE.NS
+TCS.NS
+INFY.NS
+
+Future versions may support automated symbol discovery.
+
+---
+
+# Out of Scope
+
+The following features should NOT be implemented:
+
+* Backtesting
+* Portfolio management
+* Trading execution
+* Technical indicators
+* Momentum calculations
+* Screening engine
+* Database integration
+* Airflow
+* Spark
+* Distributed processing
+* Web UI
+
+---
+
+# Folder Structure
+
+market-data/
+
+prices/
+RELIANCE.NS.parquet
+TCS.NS.parquet
+INFY.NS.parquet
+
+metadata/
+symbols.csv
+
+logs/
+
+config/
+
+---
+
+# Parquet Schema
+
+Each stock file should contain:
+
+symbol
+trade_date
+open
+high
+low
+close
+volume
+
+Example:
+
+symbol: RELIANCE.NS
+trade_date: 2026-06-05
+open: 3100.50
+high: 3120.25
+low: 3085.00
+close: 3115.75
+volume: 2543210
+
+---
+
+# Functional Requirements
+
+## Initial Load
+
+Input:
+
+* Symbol
+* Start Date
+
+Process:
+
+1. Download full history from Yahoo Finance.
+2. Convert to Polars DataFrame.
+3. Normalize schema.
+4. Save as Parquet.
+
+Output:
+
+prices/<symbol>.parquet
+
+---
+
+## Incremental Update
+
+Input:
+
+* Existing Parquet file
+
+Process:
+
+1. Read Parquet.
+2. Determine latest trade_date.
+3. Download data after latest trade_date.
+4. Append new records.
+5. Remove duplicates.
+6. Sort by trade_date.
+7. Rewrite Parquet.
+
+Output:
+
+Updated Parquet file.
+
+---
+
+# Non-Functional Requirements
+
+## Performance
+
+The system should support:
+
+* 500+ stocks
+* 20+ years of historical data
+
+on a standard developer laptop.
+
+## Reliability
+
+The system should:
+
+* Continue processing if one stock fails.
+* Log failures.
+* Proceed with remaining stocks.
+
+## Idempotency
+
+Running the downloader multiple times should not create duplicate records.
+
+---
+
+# Logging
+
+Log:
+
+* Download start
+* Download completion
+* Number of rows downloaded
+* Errors
+* Update duration
+
+Store logs in:
+
+logs/
+
+---
+
+# Configuration
+
+Use a configuration file for:
+
+* Data directory
+* Start date
+* Yahoo download parameters
+* Symbol file location
+
+---
+
+# Future Compatibility
+
+The implementation should be designed so that future phases can easily add:
+
+* DuckDB
+* Technical indicators
+* Momentum factors
+* Fundamental data
+* Screening engine
+* Backtesting engine
+
+without requiring changes to the historical data storage format.
+
+---
+
+# Deliverables
+
+1. Downloader module
+2. Incremental update module
+3. Configuration management
+4. Logging framework
+5. Symbol management
+6. Parquet storage layer
+7. Unit tests
+8. README with setup and usage instructions

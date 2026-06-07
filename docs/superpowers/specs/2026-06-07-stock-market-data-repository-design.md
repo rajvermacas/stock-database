@@ -50,6 +50,7 @@ market-data/
   logs/
 pyproject.toml
 README.md
+COMMANDS.md
 ```
 
 Runtime price files and logs are ignored by Git. Configuration and the symbol
@@ -291,6 +292,13 @@ Unit and focused integration tests cover:
 - no rewrite when already current
 - per-symbol failure isolation
 - non-zero exit after partial failure
+
+## Documentation Deliverables
+
+- `README.md` documents installation, configuration, repository layout, and the
+  ingestion behavior.
+- `COMMANDS.md` documents every supported CLI command with sample input,
+  representative console output, and exit-code behavior.
 
 ## Future Compatibility
 
