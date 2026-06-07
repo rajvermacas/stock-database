@@ -39,14 +39,18 @@ def split_batch_frame(frame: pd.DataFrame, symbols: list[str]) -> dict[str, pd.D
 def normalize_symbol(symbol: str, frame: pd.DataFrame, cutoff: date) -> pl.DataFrame:
     try:
         normalized = _prepare_pandas(frame)
-        result = pl.from_pandas(normalized).select(
-            pl.lit(symbol).alias("symbol"),
-            pl.col("trade_date").cast(pl.Date),
-            pl.col("Open").cast(pl.Float64).alias("open"),
-            pl.col("High").cast(pl.Float64).alias("high"),
-            pl.col("Low").cast(pl.Float64).alias("low"),
-            pl.col("Close").cast(pl.Float64).alias("close"),
-            pl.col("Volume").cast(pl.Int64).alias("volume"),
+        result = pl.DataFrame(
+            {
+                "symbol": [symbol] * len(normalized),
+                "trade_date": pd.to_datetime(normalized["trade_date"]).dt.date.to_list(),
+                "open": normalized["Open"].to_list(),
+                "high": normalized["High"].to_list(),
+                "low": normalized["Low"].to_list(),
+                "close": normalized["Close"].to_list(),
+                "volume": normalized["Volume"].to_list(),
+            },
+            schema=CANONICAL_SCHEMA,
+            strict=True,
         )
         result = result.filter(pl.col("trade_date") <= cutoff)
         result = result.unique(["symbol", "trade_date"], keep="last").sort("trade_date")
