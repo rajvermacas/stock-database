@@ -3,9 +3,11 @@ from __future__ import annotations
 import tomllib
 from datetime import date
 from pathlib import Path
-from typing import Literal, Self
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+
+from stock_data.intervals import get_interval
 
 
 class ConfigError(ValueError):
@@ -34,10 +36,16 @@ class DownloadConfig(StrictModel):
 
 
 class YahooConfig(StrictModel):
-    interval: Literal["1d"]
+    interval: str
     batch_size: int = Field(gt=0)
     timeout_seconds: int = Field(gt=0)
     threads: bool
+
+    @field_validator("interval")
+    @classmethod
+    def validate_interval(cls, value: str) -> str:
+        get_interval(value)
+        return value
 
 
 class AppConfig(StrictModel):
