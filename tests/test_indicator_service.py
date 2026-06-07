@@ -1,0 +1,88 @@
+import logging
+
+import pytest
+
+from stock_data.indicator_service import IndicatorUpdateError, IndicatorUpdater
+from stock_data.intervals import get_interval
+from test_indicators import price_history
+
+
+class FakePriceStore:
+    def __init__(self, prices):
+        self.prices = prices
+        self.interval = get_interval("1d")
+
+    def read(self, symbol):
+        return self.prices
+
+
+class FakeIndicatorStore:
+    def __init__(self, current=False):
+        self.current = current
+        self.published_symbols = []
+        self.removed_symbols = []
+        self.frame = None
+
+    def is_current(self, symbol, fingerprint):
+        return self.current
+
+    def read(self, symbol):
+        return self.frame
+
+    def publish(self, symbol, frame, fingerprint):
+        self.published_symbols.append(symbol)
+        self.frame = frame
+
+    def remove(self, symbol):
+        self.removed_symbols.append(symbol)
+        return True
+
+
+def build_updater(current=False, sufficient=True):
+    prices = price_history() if sufficient else price_history(100)
+    indicator_store = FakeIndicatorStore(current)
+    if current:
+        indicator_store.frame = price_history(2)
+    return IndicatorUpdater(FakePriceStore(prices), indicator_store), indicator_store
+
+
+def test_missing_indicator_is_backfilled_when_price_unchanged() -> None:
+    updater, indicator_store = build_updater(current=False)
+    result = updater.refresh("TCS.NS", prices_changed=False)
+    assert result.changed is True
+    assert indicator_store.published_symbols == ["TCS.NS"]
+
+
+def test_current_indicator_is_skipped_when_price_unchanged() -> None:
+    updater, indicator_store = build_updater(current=True)
+    result = updater.refresh("TCS.NS", prices_changed=False)
+    assert result.changed is False
+    assert indicator_store.published_symbols == []
+
+
+def test_changed_price_forces_recalculation() -> None:
+    updater, indicator_store = build_updater(current=True)
+    updater.refresh("TCS.NS", prices_changed=True)
+    assert indicator_store.published_symbols == ["TCS.NS"]
+
+
+def test_insufficient_history_removes_stale_indicator(caplog) -> None:
+    updater, indicator_store = build_updater(current=False, sufficient=False)
+    with caplog.at_level(logging.WARNING):
+        result = updater.refresh("TCS.NS", prices_changed=False)
+    assert result.changed is True
+    assert indicator_store.removed_symbols == ["TCS.NS"]
+    assert "Insufficient indicator history" in caplog.text
+
+
+def test_missing_price_fails_fast() -> None:
+    updater = IndicatorUpdater(FakePriceStore(None), FakeIndicatorStore())
+    with pytest.raises(IndicatorUpdateError, match="Price data does not exist"):
+        updater.refresh("TCS.NS", prices_changed=False)
+
+
+def test_storage_failure_includes_context() -> None:
+    updater, indicator_store = build_updater()
+    indicator_store.publish = lambda *args: (_ for _ in ()).throw(OSError("disk full"))
+    with pytest.raises(IndicatorUpdateError, match="symbol=TCS.NS.*disk full"):
+        updater.refresh("TCS.NS", prices_changed=False)
