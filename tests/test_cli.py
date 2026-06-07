@@ -11,7 +11,7 @@ runner = CliRunner()
 def test_update_symbol_prints_summary(mocker, tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
     config.write_text("", encoding="utf-8")
-    summary = UpdateSummary((SymbolResult("TCS.NS", SymbolStatus.SUCCESS),))
+    summary = UpdateSummary((SymbolResult("TCS.NS", SymbolStatus.SUCCESS, 1, 1, None),))
     mocker.patch("stock_data.cli.load_config")
     mocker.patch("stock_data.cli.configure_logging")
     mocker.patch("stock_data.cli._run", return_value=summary)
@@ -23,7 +23,7 @@ def test_update_symbol_prints_summary(mocker, tmp_path: Path) -> None:
 def test_update_symbol_returns_one_on_partial_failure(mocker, tmp_path: Path) -> None:
     config = tmp_path / "config.toml"
     config.write_text("", encoding="utf-8")
-    summary = UpdateSummary((SymbolResult("TCS.NS", SymbolStatus.FAILED, error="bad"),))
+    summary = UpdateSummary((SymbolResult("TCS.NS", SymbolStatus.FAILED, 0, 0, "bad"),))
     mocker.patch("stock_data.cli.load_config")
     mocker.patch("stock_data.cli.configure_logging")
     mocker.patch("stock_data.cli._run", return_value=summary)

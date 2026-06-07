@@ -39,7 +39,9 @@ class YahooClient:
         frames: dict[str, pd.DataFrame],
         errors: dict[str, str],
     ) -> None:
-        LOGGER.info("Downloading batch symbols=%d start=%s end=%s", len(symbols), start, end)
+        LOGGER.info(
+            "Downloading batch symbols=%d start=%s end=%s", len(symbols), start, end
+        )
         try:
             batch = yf.download(tickers=symbols, **self._parameters(start, end))
         except Exception as exc:
@@ -61,10 +63,11 @@ class YahooClient:
         LOGGER.warning("Retrying missing symbol individually: %s", symbol)
         try:
             frame = yf.download(tickers=symbol, **self._parameters(start, end))
-            if frame.empty:
+            split = split_batch_frame(frame, [symbol])
+            if symbol not in split:
                 errors[symbol] = "Yahoo returned no data after individual retry"
             else:
-                frames[symbol] = frame
+                frames[symbol] = split[symbol]
         except Exception as exc:
             LOGGER.exception("Yahoo individual retry failed symbol=%s", symbol)
             errors[symbol] = str(exc)
@@ -84,4 +87,3 @@ class YahooClient:
 
 def _chunks(symbols: list[str], size: int) -> list[list[str]]:
     return [symbols[index : index + size] for index in range(0, len(symbols), size)]
-

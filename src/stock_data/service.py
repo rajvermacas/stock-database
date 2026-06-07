@@ -23,9 +23,9 @@ class SymbolStatus(StrEnum):
 class SymbolResult:
     symbol: str
     status: SymbolStatus
-    downloaded_rows: int = 0
-    stored_rows: int = 0
-    error: str | None = None
+    downloaded_rows: int
+    stored_rows: int
+    error: str | None
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,9 @@ class UpdateSummary:
 
 
 class UpdateService:
-    def __init__(self, store: PriceStore, yahoo: YahooClient, initial_start: date) -> None:
+    def __init__(
+        self, store: PriceStore, yahoo: YahooClient, initial_start: date
+    ) -> None:
         self.store = store
         self.yahoo = yahoo
         self.initial_start = initial_start
@@ -57,7 +59,9 @@ class UpdateService:
             raise ValueError("start and end must be supplied together")
         groups, results = self._plan(symbols, completed_date, start, end)
         for (request_start, request_end), group in groups.items():
-            results.extend(self._process_group(group, request_start, request_end, completed_date))
+            results.extend(
+                self._process_group(group, request_start, request_end, completed_date)
+            )
         ordered = sorted(results, key=lambda result: symbols.index(result.symbol))
         return UpdateSummary(tuple(ordered))
 
@@ -74,7 +78,7 @@ class UpdateService:
             request_start = start or self._incremental_start(symbol)
             request_end = min(end or completed_date, completed_date)
             if request_start > request_end:
-                results.append(SymbolResult(symbol, SymbolStatus.UNCHANGED))
+                results.append(SymbolResult(symbol, SymbolStatus.UNCHANGED, 0, 0, None))
             else:
                 groups[(request_start, request_end)].append(symbol)
         return groups, results
@@ -90,15 +94,32 @@ class UpdateService:
         results: list[SymbolResult] = []
         for symbol in symbols:
             if symbol in batch.errors:
-                results.append(SymbolResult(symbol, SymbolStatus.FAILED, error=batch.errors[symbol]))
+                results.append(
+                    SymbolResult(
+                        symbol, SymbolStatus.FAILED, 0, 0, batch.errors[symbol]
+                    )
+                )
                 continue
             try:
                 normalized = normalize_symbol(symbol, batch.frames[symbol], cutoff)
                 write = self.store.upsert(symbol, normalized)
-                status = SymbolStatus.SUCCESS if write.changed else SymbolStatus.UNCHANGED
-                results.append(SymbolResult(symbol, status, write.downloaded_rows, write.stored_rows))
+                status = (
+                    SymbolStatus.SUCCESS if write.changed else SymbolStatus.UNCHANGED
+                )
+                result = SymbolResult(
+                    symbol, status, write.downloaded_rows, write.stored_rows, None
+                )
+                LOGGER.info(
+                    "Update complete symbol=%s status=%s downloaded_rows=%d stored_rows=%d",
+                    symbol,
+                    status,
+                    write.downloaded_rows,
+                    write.stored_rows,
+                )
+                results.append(result)
             except Exception as exc:
                 LOGGER.exception("Update failed symbol=%s", symbol)
-                results.append(SymbolResult(symbol, SymbolStatus.FAILED, error=str(exc)))
+                results.append(
+                    SymbolResult(symbol, SymbolStatus.FAILED, 0, 0, str(exc))
+                )
         return results
-

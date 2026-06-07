@@ -45,4 +45,3 @@ def test_load_config_resolves_paths(tmp_path: Path) -> None:
 def test_load_config_rejects_invalid_values(tmp_path: Path, text: str) -> None:
     with pytest.raises(ConfigError):
         load_config(write_config(tmp_path, text))
-

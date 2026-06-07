@@ -12,4 +12,3 @@ def latest_completed_date(now: datetime) -> date:
     if ist_now.time() >= MARKET_DATA_READY:
         return ist_now.date()
     return ist_now.date() - timedelta(days=1)
-

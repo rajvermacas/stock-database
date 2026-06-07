@@ -19,16 +19,24 @@ class FakeStore:
 
 
 class FakeYahoo:
-    def __init__(self) -> None:
+    def __init__(self, errors=None) -> None:
         self.requests = []
+        self.errors = errors or {}
 
     def download(self, symbols, start, end):
         self.requests.append((symbols, start, end))
         frame = pd.DataFrame(
-            {"Open": [1.0], "High": [2.0], "Low": [0.5], "Close": [1.5], "Volume": [10]},
+            {
+                "Open": [1.0],
+                "High": [2.0],
+                "Low": [0.5],
+                "Close": [1.5],
+                "Volume": [10],
+            },
             index=pd.DatetimeIndex([end], name="Date"),
         )
-        return DownloadBatch({symbol: frame for symbol in symbols}, {})
+        frames = {symbol: frame for symbol in symbols if symbol not in self.errors}
+        return DownloadBatch(frames, self.errors)
 
 
 def test_incremental_update_starts_after_latest_date() -> None:
@@ -45,3 +53,19 @@ def test_current_symbol_is_unchanged_without_download() -> None:
     summary = service.update(["TCS.NS"], completed_date=date(2026, 6, 5))
     assert yahoo.requests == []
     assert summary.count(SymbolStatus.UNCHANGED) == 1
+
+
+def test_explicit_range_ignores_latest_date_and_continues_after_failure() -> None:
+    yahoo = FakeYahoo({"BAD.NS": "missing"})
+    service = UpdateService(FakeStore(date(2026, 6, 5)), yahoo, date(2000, 1, 1))
+    summary = service.update(
+        ["TCS.NS", "BAD.NS"],
+        completed_date=date(2026, 6, 5),
+        start=date(2026, 6, 1),
+        end=date(2026, 6, 3),
+    )
+    assert yahoo.requests == [
+        (["TCS.NS", "BAD.NS"], date(2026, 6, 1), date(2026, 6, 3))
+    ]
+    assert summary.count(SymbolStatus.SUCCESS) == 1
+    assert summary.count(SymbolStatus.FAILED) == 1

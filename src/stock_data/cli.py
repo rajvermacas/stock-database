@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -68,13 +69,23 @@ def _execute(
         symbols = [symbol] if symbol else load_symbols(config.paths.symbols_file)
         if symbols == [""]:
             raise ValueError("symbol must not be blank")
+        started = time.monotonic()
         summary = _run(config, symbols, start, end)
+        LOGGER.info(
+            "Command completed duration_seconds=%.3f", time.monotonic() - started
+        )
         _print_summary(summary)
         if summary.has_failures:
             raise typer.Exit(1)
     except typer.Exit:
         raise
-    except (ConfigError, LoggingConfigError, SymbolFileError, OSError, ValueError) as exc:
+    except (
+        ConfigError,
+        LoggingConfigError,
+        SymbolFileError,
+        OSError,
+        ValueError,
+    ) as exc:
         LOGGER.exception("Command failed")
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(2) from exc
@@ -95,7 +106,9 @@ def _run(
     return service.update(symbols, completed, start_date, end_date)
 
 
-def _parse_dates(start_date: str | None, end_date: str | None) -> tuple[date | None, date | None]:
+def _parse_dates(
+    start_date: str | None, end_date: str | None
+) -> tuple[date | None, date | None]:
     if (start_date is None) != (end_date is None):
         raise ValueError("--start-date and --end-date must be supplied together")
     if start_date is None or end_date is None:

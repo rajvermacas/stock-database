@@ -79,6 +79,9 @@ class PriceStore:
             raise StorageError(f"Unexpected schema for {symbol}: {frame.schema}")
         if frame.is_empty():
             raise StorageError(f"Price data for {symbol} is empty")
+        if frame.null_count().select(pl.sum_horizontal(pl.all())).item() > 0:
+            raise StorageError(f"Price data for {symbol} contains nulls")
+        if frame.unique(["symbol", "trade_date"]).height != frame.height:
+            raise StorageError(f"Price data for {symbol} contains duplicate dates")
         if frame["symbol"].unique().to_list() != [symbol]:
             raise StorageError(f"Price data contains unexpected symbols for {symbol}")
-

@@ -22,7 +22,9 @@ class NormalizationError(ValueError):
     """Raised when Yahoo data cannot be converted to the canonical schema."""
 
 
-def split_batch_frame(frame: pd.DataFrame, symbols: list[str]) -> dict[str, pd.DataFrame]:
+def split_batch_frame(
+    frame: pd.DataFrame, symbols: list[str]
+) -> dict[str, pd.DataFrame]:
     if frame.empty:
         return {}
     if not isinstance(frame.columns, pd.MultiIndex):
@@ -42,7 +44,9 @@ def normalize_symbol(symbol: str, frame: pd.DataFrame, cutoff: date) -> pl.DataF
         result = pl.DataFrame(
             {
                 "symbol": [symbol] * len(normalized),
-                "trade_date": pd.to_datetime(normalized["trade_date"]).dt.date.to_list(),
+                "trade_date": pd.to_datetime(
+                    normalized["trade_date"]
+                ).dt.date.to_list(),
                 "open": normalized["Open"].to_list(),
                 "high": normalized["High"].to_list(),
                 "low": normalized["Low"].to_list(),
@@ -66,11 +70,8 @@ def _prepare_pandas(frame: pd.DataFrame) -> pd.DataFrame:
     missing = YAHOO_COLUMNS.difference(frame.columns)
     if missing:
         raise ValueError(f"missing columns: {sorted(missing)}")
-    index_name = frame.index.name or "Date"
-    prepared = frame.reset_index().rename(columns={index_name: "trade_date"})
-    if "trade_date" not in prepared:
-        prepared = prepared.rename(columns={prepared.columns[0]: "trade_date"})
-    return prepared
+    prepared = frame.reset_index()
+    return prepared.rename(columns={prepared.columns[0]: "trade_date"})
 
 
 def _validate_result(frame: pl.DataFrame) -> None:

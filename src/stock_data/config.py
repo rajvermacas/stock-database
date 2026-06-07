@@ -65,4 +65,3 @@ def load_config(path: Path) -> AppConfig:
         return AppConfig.model_validate(raw).resolve_relative_paths(path.parent)
     except (OSError, tomllib.TOMLDecodeError, ValidationError) as exc:
         raise ConfigError(f"Invalid configuration {path}: {exc}") from exc
-
