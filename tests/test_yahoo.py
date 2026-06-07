@@ -42,3 +42,15 @@ def test_download_splits_symbols_into_configured_chunks(mocker) -> None:
     )
     client.download(["TCS.NS", "INFY.NS"], date(2026, 6, 1), date(2026, 6, 5))
     assert download.call_count == 2
+
+
+def test_batch_error_contains_interval_and_range(mocker) -> None:
+    mocker.patch(
+        "stock_data.yahoo.yf.download", side_effect=RuntimeError("unavailable")
+    )
+    client = YahooClient(
+        YahooConfig(interval="1h", batch_size=2, timeout_seconds=30, threads=False)
+    )
+    result = client.download(["TCS.NS"], date(2025, 1, 1), date(2026, 6, 1))
+    assert "interval=1h" in result.errors["TCS.NS"]
+    assert "start=2025-01-01 end=2026-06-01" in result.errors["TCS.NS"]

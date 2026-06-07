@@ -1,7 +1,8 @@
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 
+from stock_data.intervals import IST, get_interval
 from stock_data.service import SymbolStatus, UpdateService
 from stock_data.storage import WriteResult
 from stock_data.yahoo import DownloadBatch
@@ -12,7 +13,7 @@ class FakeStore:
         self.latest = latest
         self.failed_symbol = failed_symbol
 
-    def latest_date(self, symbol):
+    def latest_timestamp(self, symbol):
         if symbol == self.failed_symbol:
             raise ValueError("invalid parquet")
         return self.latest
@@ -36,49 +37,45 @@ class FakeYahoo:
                 "Close": [1.5],
                 "Volume": [10],
             },
-            index=pd.DatetimeIndex([end], name="Date"),
+            index=pd.DatetimeIndex([f"{end} 09:15"], name="Datetime"),
         )
         frames = {symbol: frame for symbol in symbols if symbol not in self.errors}
         return DownloadBatch(frames, self.errors)
 
 
-def test_incremental_update_starts_after_latest_date() -> None:
-    yahoo = FakeYahoo()
-    service = UpdateService(FakeStore(date(2026, 6, 4)), yahoo, date(2000, 1, 1))
-    summary = service.update(["TCS.NS"], completed_date=date(2026, 6, 5))
-    assert yahoo.requests == [(["TCS.NS"], date(2026, 6, 5), date(2026, 6, 5))]
-    assert summary.count(SymbolStatus.SUCCESS) == 1
+def build_service(interval="30m", latest=None, errors=None, failed_symbol=None):
+    return UpdateService(
+        FakeStore(latest, failed_symbol),
+        FakeYahoo(errors),
+        get_interval(interval),
+        date(2000, 1, 1),
+    )
 
 
-def test_current_symbol_is_unchanged_without_download() -> None:
-    yahoo = FakeYahoo()
-    service = UpdateService(FakeStore(date(2026, 6, 5)), yahoo, date(2000, 1, 1))
-    summary = service.update(["TCS.NS"], completed_date=date(2026, 6, 5))
-    assert yahoo.requests == []
-    assert summary.count(SymbolStatus.UNCHANGED) == 1
+def test_intraday_incremental_request_includes_next_candle_date() -> None:
+    latest = datetime(2026, 6, 8, 14, 30, tzinfo=IST)
+    service = build_service(latest=latest)
+    service.update(["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
+    assert service.yahoo.requests == [(["TCS.NS"], date(2026, 6, 8), date(2026, 6, 8))]
 
 
-def test_explicit_range_ignores_latest_date_and_continues_after_failure() -> None:
-    yahoo = FakeYahoo({"BAD.NS": "missing"})
-    service = UpdateService(FakeStore(date(2026, 6, 5)), yahoo, date(2000, 1, 1))
+def test_explicit_range_continues_after_failure() -> None:
+    service = build_service(errors={"BAD.NS": "missing"})
     summary = service.update(
         ["TCS.NS", "BAD.NS"],
-        completed_date=date(2026, 6, 5),
-        start=date(2026, 6, 1),
-        end=date(2026, 6, 3),
+        datetime(2026, 6, 8, 16, 30, tzinfo=IST),
+        date(2026, 6, 8),
+        date(2026, 6, 8),
     )
-    assert yahoo.requests == [
-        (["TCS.NS", "BAD.NS"], date(2026, 6, 1), date(2026, 6, 3))
-    ]
     assert summary.count(SymbolStatus.SUCCESS) == 1
     assert summary.count(SymbolStatus.FAILED) == 1
 
 
-def test_planning_storage_failure_is_isolated_per_symbol() -> None:
-    yahoo = FakeYahoo()
-    store = FakeStore(date(2026, 6, 4), failed_symbol="BAD.NS")
-    service = UpdateService(store, yahoo, date(2000, 1, 1))
-    summary = service.update(["BAD.NS", "TCS.NS"], completed_date=date(2026, 6, 5))
-    assert yahoo.requests == [(["TCS.NS"], date(2026, 6, 5), date(2026, 6, 5))]
+def test_planning_storage_failure_is_isolated() -> None:
+    latest = datetime(2026, 6, 8, 14, 30, tzinfo=IST)
+    service = build_service(latest=latest, failed_symbol="BAD.NS")
+    summary = service.update(
+        ["BAD.NS", "TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST)
+    )
     assert summary.count(SymbolStatus.FAILED) == 1
     assert summary.count(SymbolStatus.SUCCESS) == 1

@@ -14,6 +14,16 @@ from stock_data.normalization import split_batch_frame
 LOGGER = logging.getLogger(__name__)
 
 
+class YahooDownloadError(RuntimeError):
+    def __init__(
+        self, symbols: list[str], interval: str, start: date, end: date, cause: object
+    ) -> None:
+        super().__init__(
+            f"Yahoo download failed symbols={','.join(symbols)} interval={interval} "
+            f"start={start} end={end}: {cause}"
+        )
+
+
 @dataclass(frozen=True)
 class DownloadBatch:
     frames: dict[str, pd.DataFrame]
@@ -40,13 +50,18 @@ class YahooClient:
         errors: dict[str, str],
     ) -> None:
         LOGGER.info(
-            "Downloading batch symbols=%d start=%s end=%s", len(symbols), start, end
+            "Downloading batch symbols=%d interval=%s start=%s end=%s",
+            len(symbols),
+            self.config.interval,
+            start,
+            end,
         )
         try:
             batch = yf.download(tickers=symbols, **self._parameters(start, end))
         except Exception as exc:
             LOGGER.exception("Yahoo batch failed symbols=%s", symbols)
-            errors.update({symbol: str(exc) for symbol in symbols})
+            error = YahooDownloadError(symbols, self.config.interval, start, end, exc)
+            errors.update({symbol: str(error) for symbol in symbols})
             return
         frames.update(split_batch_frame(batch, symbols))
         for symbol in set(symbols).difference(frames):
@@ -65,12 +80,22 @@ class YahooClient:
             frame = yf.download(tickers=symbol, **self._parameters(start, end))
             split = split_batch_frame(frame, [symbol])
             if symbol not in split:
-                errors[symbol] = "Yahoo returned no data after individual retry"
+                errors[symbol] = str(
+                    YahooDownloadError(
+                        [symbol],
+                        self.config.interval,
+                        start,
+                        end,
+                        "Yahoo returned no data after individual retry",
+                    )
+                )
             else:
                 frames[symbol] = split[symbol]
         except Exception as exc:
             LOGGER.exception("Yahoo individual retry failed symbol=%s", symbol)
-            errors[symbol] = str(exc)
+            errors[symbol] = str(
+                YahooDownloadError([symbol], self.config.interval, start, end, exc)
+            )
 
     def _parameters(self, start: date, end: date) -> dict[str, Any]:
         return {
