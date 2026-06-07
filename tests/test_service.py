@@ -8,10 +8,13 @@ from stock_data.yahoo import DownloadBatch
 
 
 class FakeStore:
-    def __init__(self, latest=None) -> None:
+    def __init__(self, latest=None, failed_symbol=None) -> None:
         self.latest = latest
+        self.failed_symbol = failed_symbol
 
     def latest_date(self, symbol):
+        if symbol == self.failed_symbol:
+            raise ValueError("invalid parquet")
         return self.latest
 
     def upsert(self, symbol, frame):
@@ -69,3 +72,13 @@ def test_explicit_range_ignores_latest_date_and_continues_after_failure() -> Non
     ]
     assert summary.count(SymbolStatus.SUCCESS) == 1
     assert summary.count(SymbolStatus.FAILED) == 1
+
+
+def test_planning_storage_failure_is_isolated_per_symbol() -> None:
+    yahoo = FakeYahoo()
+    store = FakeStore(date(2026, 6, 4), failed_symbol="BAD.NS")
+    service = UpdateService(store, yahoo, date(2000, 1, 1))
+    summary = service.update(["BAD.NS", "TCS.NS"], completed_date=date(2026, 6, 5))
+    assert yahoo.requests == [(["TCS.NS"], date(2026, 6, 5), date(2026, 6, 5))]
+    assert summary.count(SymbolStatus.FAILED) == 1
+    assert summary.count(SymbolStatus.SUCCESS) == 1

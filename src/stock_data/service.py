@@ -75,7 +75,14 @@ class UpdateService:
         groups: dict[tuple[date, date], list[str]] = defaultdict(list)
         results: list[SymbolResult] = []
         for symbol in symbols:
-            request_start = start or self._incremental_start(symbol)
+            try:
+                request_start = start or self._incremental_start(symbol)
+            except Exception as exc:
+                LOGGER.exception("Update planning failed symbol=%s", symbol)
+                results.append(
+                    SymbolResult(symbol, SymbolStatus.FAILED, 0, 0, str(exc))
+                )
+                continue
             request_end = min(end or completed_date, completed_date)
             if request_start > request_end:
                 results.append(SymbolResult(symbol, SymbolStatus.UNCHANGED, 0, 0, None))
