@@ -9,6 +9,20 @@ python -m pip install -e '.[dev]'
 All commands require a valid configuration file. The examples use
 `config/stock-data.toml`.
 
+Set the output root and interval in TOML:
+
+```toml
+[paths]
+data_dir = "../market-data"
+
+[yahoo]
+interval = "30m"
+```
+
+Supported intervals are `1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk,
+1mo, 3mo`. Change `interval` to `30m`, `1h`, or `1d` before running the same
+commands. Output is written to `prices/<interval>/<symbol>.parquet`.
+
 ## Help
 
 ```bash
@@ -39,6 +53,8 @@ stock-data --config config/stock-data.toml update-all
 Representative successful output:
 
 ```text
+Interval: 30m
+Price directory: /path/to/market-data/prices/30m
 Successful: 3
 Unchanged: 0
 Failed: 0
@@ -52,7 +68,7 @@ Representative partial-failure output:
 Successful: 2
 Unchanged: 0
 Failed: 1
-  INVALID.NS: Yahoo returned no data after individual retry
+  INVALID.NS: Yahoo download failed symbols=INVALID.NS interval=30m start=2026-05-01 end=2026-05-31: Yahoo returned no data after individual retry
 ```
 
 Exit code: `1` after processing all symbols when any symbol fails.
@@ -127,3 +143,5 @@ Error: --start-date and --end-date must be supplied together
 
 Exit code: `2`.
 
+Yahoo availability and unsupported-range failures are processed per symbol and
+exit with code `1`; the message includes symbol, interval, start, and end.

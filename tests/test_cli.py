@@ -3,6 +3,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from stock_data.cli import app
+from stock_data.config import AppConfig
 from stock_data.service import SymbolResult, SymbolStatus, UpdateSummary
 
 runner = CliRunner()
@@ -40,3 +41,25 @@ def test_unpaired_range_returns_validation_exit(tmp_path: Path) -> None:
     )
     assert result.exit_code == 2
     assert "must be supplied together" in result.output
+
+
+def test_run_uses_configured_interval(mocker, tmp_path: Path) -> None:
+    from stock_data.cli import _run
+
+    config = AppConfig.model_validate(
+        {
+            "paths": {"data_dir": tmp_path, "symbols_file": tmp_path / "symbols.csv"},
+            "download": {"initial_start_date": "2026-01-01"},
+            "yahoo": {
+                "interval": "30m",
+                "batch_size": 2,
+                "timeout_seconds": 30,
+                "threads": False,
+            },
+        }
+    )
+    store = mocker.patch("stock_data.cli.PriceStore")
+    update = mocker.patch("stock_data.cli.UpdateService").return_value.update
+    update.return_value = UpdateSummary(())
+    _run(config, ["TCS.NS"], None, None)
+    assert store.call_args.args[1].name == "30m"

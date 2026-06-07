@@ -9,8 +9,8 @@ from typing import Annotated
 import typer
 
 from stock_data.config import AppConfig, ConfigError, load_config
+from stock_data.intervals import get_interval
 from stock_data.logging_config import LoggingConfigError, configure_logging
-from stock_data.market_time import latest_completed_date
 from stock_data.service import SymbolStatus, UpdateService, UpdateSummary
 from stock_data.storage import PriceStore
 from stock_data.symbols import SymbolFileError, load_symbols
@@ -69,6 +69,10 @@ def _execute(
         symbols = [symbol] if symbol else load_symbols(config.paths.symbols_file)
         if symbols == [""]:
             raise ValueError("symbol must not be blank")
+        typer.echo(f"Interval: {config.yahoo.interval}")
+        typer.echo(
+            f"Price directory: {config.paths.prices_dir / config.yahoo.interval}"
+        )
         started = time.monotonic()
         summary = _run(config, symbols, start, end)
         LOGGER.info(
@@ -97,13 +101,14 @@ def _run(
     start_date: date | None,
     end_date: date | None,
 ) -> UpdateSummary:
+    interval = get_interval(config.yahoo.interval)
     service = UpdateService(
-        PriceStore(config.paths.prices_dir),
+        PriceStore(config.paths.prices_dir, interval),
         YahooClient(config.yahoo),
+        interval,
         config.download.initial_start_date,
     )
-    completed = latest_completed_date(datetime.now(timezone.utc))
-    return service.update(symbols, completed, start_date, end_date)
+    return service.update(symbols, datetime.now(timezone.utc), start_date, end_date)
 
 
 def _parse_dates(

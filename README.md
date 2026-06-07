@@ -1,6 +1,6 @@
 # Stock Data Repository
 
-A local repository for raw, daily NSE OHLCV data downloaded from Yahoo Finance.
+A local repository for raw NSE OHLCV data downloaded from Yahoo Finance.
 It stores one validated Parquet file per symbol for later analytics with Polars,
 DuckDB, or similar tools.
 
@@ -32,7 +32,7 @@ symbols_file = "../market-data/metadata/symbols.csv"
 initial_start_date = "2000-01-01"
 
 [yahoo]
-interval = "1d"
+interval = "1h"
 batch_size = 50
 timeout_seconds = 30
 threads = true
@@ -52,15 +52,25 @@ INFY.NS
 
 A normal update downloads from the configured initial date for a new symbol. For
 an existing symbol, it downloads strictly after the greatest stored
-`trade_date`. It does not detect or repair older gaps.
+`trade_timestamp`. It does not detect or repair older gaps.
 
 Supplying both `--start-date` and `--end-date` performs a bounded inclusive
 upsert. Newly downloaded rows replace stored rows for matching dates; rows
 outside the range remain unchanged.
 
-Raw, unadjusted Yahoo prices are stored. Before 4:00 PM IST, today's candle is
-excluded. At or after 4:00 PM IST, today's candle may be stored if Yahoo returns
-it.
+Raw, unadjusted Yahoo prices are stored. Only completed candles are retained.
+Intraday candles are complete after their duration, daily candles after 4:00 PM
+IST, and the current weekly/monthly/quarterly period is excluded.
+
+Supported native intervals:
+
+```text
+1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo
+```
+
+Select one through `[yahoo].interval`. The application sends requested ranges
+to Yahoo without enforcing retention limits; unavailable ranges fail with an
+interval-and-range-specific error.
 
 Symbols are downloaded in configurable batches. A symbol omitted from a
 successful batch is retried individually once. Other symbols continue when one
@@ -73,18 +83,21 @@ Runtime files are created under the configured `data_dir`:
 ```text
 market-data/
   prices/
-    RELIANCE.NS.parquet
+    1h/
+      RELIANCE.NS.parquet
   metadata/
     symbols.csv
   logs/
 ```
 
-Each Parquet file is atomically replaced and sorted by `trade_date`.
+The output root is `[paths].data_dir`; relative paths resolve from the TOML
+file's directory. Files use `prices/<interval>/<symbol>.parquet`, are atomically
+replaced, and are sorted by `trade_timestamp`.
 
 | Column | Type |
 |---|---|
 | `symbol` | string |
-| `trade_date` | date |
+| `trade_timestamp` | timezone-aware timestamp in `Asia/Kolkata` |
 | `open` | float64 |
 | `high` | float64 |
 | `low` | float64 |
@@ -100,4 +113,3 @@ pytest -v
 ruff check src tests
 ruff format --check src tests
 ```
-
