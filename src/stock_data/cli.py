@@ -9,6 +9,8 @@ from typing import Annotated
 import typer
 
 from stock_data.config import AppConfig, ConfigError, load_config
+from stock_data.indicator_service import IndicatorUpdater
+from stock_data.indicator_storage import IndicatorStore
 from stock_data.intervals import get_interval
 from stock_data.logging_config import LoggingConfigError, configure_logging
 from stock_data.service import SymbolStatus, UpdateService, UpdateSummary
@@ -73,6 +75,11 @@ def _execute(
         typer.echo(
             f"Price directory: {config.paths.prices_dir / config.yahoo.interval}"
         )
+        if config.indicators.enabled:
+            typer.echo(
+                "Indicator directory: "
+                f"{config.paths.indicators_dir / config.yahoo.interval}"
+            )
         started = time.monotonic()
         summary = _run(config, symbols, start, end)
         LOGGER.info(
@@ -102,9 +109,15 @@ def _run(
     end_date: date | None,
 ) -> UpdateSummary:
     interval = get_interval(config.yahoo.interval)
+    price_store = PriceStore(config.paths.prices_dir, interval)
+    indicator_updater = None
+    if config.indicators.enabled:
+        indicator_store = IndicatorStore(config.paths.indicators_dir, interval)
+        indicator_updater = IndicatorUpdater(price_store, indicator_store)
     service = UpdateService(
-        PriceStore(config.paths.prices_dir, interval),
+        price_store,
         YahooClient(config.yahoo),
+        indicator_updater,
         interval,
         config.download.initial_start_date,
     )

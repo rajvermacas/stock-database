@@ -4,8 +4,9 @@ A local repository for raw NSE OHLCV data downloaded from Yahoo Finance.
 It stores one validated Parquet file per symbol for later analytics with Polars,
 DuckDB, or similar tools.
 
-The initial release is ingestion-only. It does not include a web UI, screening,
-indicators, backtesting, automated symbol discovery, or historical gap repair.
+It also maintains precalculated technical indicators from persisted raw prices.
+It does not include a web UI, screening, backtesting, automated symbol discovery,
+or historical gap repair.
 
 ## Requirements And Installation
 
@@ -36,6 +37,9 @@ interval = "1h"
 batch_size = 50
 timeout_seconds = 30
 threads = true
+
+[indicators]
+enabled = true
 ```
 
 The symbol CSV must have a `symbol` header and contain no blank or duplicate
@@ -76,12 +80,21 @@ Symbols are downloaded in configurable batches. A symbol omitted from a
 successful batch is retried individually once. Other symbols continue when one
 fails, and the command returns exit code `1` after a partial failure.
 
+When indicators are enabled, every nonfailed symbol in the selected configured
+interval is checked after its price update. Changed prices force recalculation.
+Missing or stale indicator files are backfilled, including for existing price
+files with no newly downloaded candle. Other intervals are not scanned.
+
 ## Storage
 
 Runtime files are created under the configured `data_dir`:
 
 ```text
 market-data/
+  indicators/
+    1h/
+      RELIANCE.NS.parquet
+      RELIANCE.NS.metadata.json
   prices/
     1h/
       RELIANCE.NS.parquet
@@ -103,6 +116,34 @@ replaced, and are sorted by `trade_timestamp`.
 | `low` | float64 |
 | `close` | float64 |
 | `volume` | int64 |
+
+Raw price files remain unchanged by indicator processing.
+
+## Indicators
+
+TA-Lib calculates standard indicators from full persisted raw, unadjusted OHLCV
+history. Indicator files use `indicators/<interval>/<symbol>.parquet`; matching
+metadata files contain a source-price fingerprint used to detect stale output.
+
+Every output row requires full 365-calendar-day history and valid values for all
+indicators. When history is insufficient, no indicator file is written and a
+warning is logged. A calculation or storage failure preserves prices and any
+previous valid indicator file, but marks that symbol update failed.
+
+| Columns | Formula |
+|---|---|
+| `ema_10`, `ema_20`, `ema_50`, `ema_100`, `ema_200` | EMA of close |
+| `volume_ema_20`, `relative_volume_20` | Volume EMA and volume divided by EMA |
+| `rsi_14` | Wilder RSI |
+| `atr_14`, `atr_percent_14` | Wilder ATR and ATR divided by close |
+| `macd_12_26`, `macd_signal_9`, `macd_histogram` | Standard MACD |
+| `adx_14`, `plus_di_14`, `minus_di_14` | Wilder directional indicators |
+| `band_upper_20_2`, `band_middle_20`, `band_lower_20_2`, `band_width_20_2` | EMA-20-centered bands using 20-period standard deviation |
+| `roc_20`, `obv` | Rate of change and on-balance volume |
+| `trailing_365d_high`, `trailing_365d_low`, `distance_from_365d_high_percent` | Trailing calendar-year context |
+
+No simple moving averages are calculated. Corporate actions may distort signals
+because source prices are raw rather than adjusted.
 
 ## Development
 

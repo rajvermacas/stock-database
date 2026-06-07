@@ -56,10 +56,15 @@ def test_run_uses_configured_interval(mocker, tmp_path: Path) -> None:
                 "timeout_seconds": 30,
                 "threads": False,
             },
+            "indicators": {"enabled": True},
         }
     )
     store = mocker.patch("stock_data.cli.PriceStore")
+    indicator_store = mocker.patch("stock_data.cli.IndicatorStore")
+    indicator_updater = mocker.patch("stock_data.cli.IndicatorUpdater")
     update = mocker.patch("stock_data.cli.UpdateService").return_value.update
     update.return_value = UpdateSummary(())
     _run(config, ["TCS.NS"], None, None)
     assert store.call_args.args[1].name == "30m"
+    assert indicator_store.call_args.args[1].name == "30m"
+    assert indicator_updater.call_args.args[0] is store.return_value
