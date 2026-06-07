@@ -1,0 +1,13 @@
+[paths]
+data_dir = "../market-data"
+symbols_file = "../market-data/metadata/symbols.csv"
+
+[download]
+initial_start_date = "2000-01-01"
+
+[yahoo]
+interval = "1d"
+batch_size = 50
+timeout_seconds = 30
+threads = true
+
