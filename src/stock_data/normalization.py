@@ -26,6 +26,7 @@ CANONICAL_SCHEMA = {
     "volume": pl.Int64,
 }
 YAHOO_COLUMNS = {"Open", "High", "Low", "Close", "Volume"}
+ORDERED_YAHOO_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 
 
 class NormalizationError(ValueError):
@@ -85,7 +86,24 @@ def _prepare_pandas(frame: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"missing columns: {sorted(missing)}")
     prepared = frame.reset_index()
-    return prepared.rename(columns={prepared.columns[0]: "trade_timestamp"})
+    prepared = prepared.rename(columns={prepared.columns[0]: "trade_timestamp"})
+    return _clean_required_values(prepared)
+
+
+def _clean_required_values(frame: pd.DataFrame) -> pd.DataFrame:
+    values = frame[ORDERED_YAHOO_COLUMNS].apply(pd.to_numeric, errors="raise")
+    keep = ~values.isna().all(axis=1)
+    cleaned = frame.loc[keep].copy()
+    values = values.loc[keep]
+    if cleaned.empty:
+        raise ValueError("response contains only empty candles")
+    if values.isna().any(axis=None):
+        raise ValueError("candle contains partially missing OHLCV values")
+    if (values["Volume"] % 1 != 0).any():
+        raise ValueError("volume contains non-integral values")
+    cleaned[ORDERED_YAHOO_COLUMNS] = values
+    cleaned["Volume"] = values["Volume"].astype("int64")
+    return cleaned
 
 
 def _timestamps_to_ist(values: pd.Series) -> list[datetime]:

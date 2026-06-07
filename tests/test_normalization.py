@@ -53,3 +53,29 @@ def test_normalize_symbol_rejects_missing_required_column() -> None:
         normalize_symbol(
             "TCS.NS", frame, get_interval("1d"), datetime(2026, 6, 6, tzinfo=IST)
         )
+
+
+def test_normalize_drops_wholly_empty_batch_alignment_rows() -> None:
+    frame = yahoo_frame(["2026-06-04", "2026-06-05"])
+    frame.loc[pd.Timestamp("2026-06-04")] = float("nan")
+    frame["Volume"] = frame["Volume"].astype("float64")
+    result = normalize_symbol(
+        "TCS.NS",
+        frame,
+        get_interval("1d"),
+        datetime(2026, 6, 6, tzinfo=IST),
+    )
+    assert result.height == 1
+    assert result["volume"].to_list() == [1000]
+
+
+def test_normalize_rejects_partially_missing_candle() -> None:
+    frame = yahoo_frame(["2026-06-05"])
+    frame.loc[pd.Timestamp("2026-06-05"), "Volume"] = float("nan")
+    with pytest.raises(NormalizationError, match="partially missing"):
+        normalize_symbol(
+            "TCS.NS",
+            frame,
+            get_interval("1d"),
+            datetime(2026, 6, 6, tzinfo=IST),
+        )
