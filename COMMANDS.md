@@ -27,7 +27,7 @@ commands. Output is written to `prices/<interval>/<symbol>.parquet`.
 
 ```bash
 stock-data --help
-stock-data --config config/stock-data.toml update-all --help
+uv run stock-data --config config/stock-data.toml update-all --help
 stock-data --config config/stock-data.toml update-symbol --help
 ```
 
