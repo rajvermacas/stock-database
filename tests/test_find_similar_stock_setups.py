@@ -17,7 +17,6 @@ def test_constants_define_fixed_version_one_semantics() -> None:
     assert similarity.WINDOW == 10
     assert similarity.MAX_MATCHES == 200
     assert similarity.FUTURE_PERIODS == (5, 10, 20, 30)
-    assert similarity.CORPORATE_ACTION_THRESHOLD == 0.40
     assert len(similarity.SUBGROUPS) == 6
 
 
@@ -57,7 +56,6 @@ def test_context_gates_reject_mismatched_regimes() -> None:
             "ema_200_side": [1, 1],
             "volatility_regime": ["medium", "medium"],
             "yearly_position_regime": ["near_high", "near_high"],
-            "has_corporate_action_jump": [False, False],
         }
     ).lazy()
     latest = {
@@ -90,6 +88,7 @@ def test_real_query_returns_auditable_non_overlapping_matches() -> None:
     assert result["metadata"]["warning"] == (
         "Prices are adjusted for corporate actions; volume is Yahoo-provided."
     )
+    assert "jump_excluded_count" not in result["metadata"]
     assert 0 < result["metadata"]["match_count"] <= 200
     matches = result["matches"]
     assert all("combined_distance" in row for row in matches)

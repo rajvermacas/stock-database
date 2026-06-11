@@ -15,7 +15,6 @@ import polars as pl
 WINDOW = 10
 MAX_MATCHES = 200
 FUTURE_PERIODS = (5, 10, 20, 30)
-CORPORATE_ACTION_THRESHOLD = 0.40
 SUBGROUPS = (
     "chart_shape",
     "pace",
@@ -136,10 +135,6 @@ def _context_columns(frame: pl.LazyFrame) -> pl.LazyFrame:
         max_up=pl.col("close_return").rolling_max(WINDOW),
         max_down=pl.col("close_return").rolling_min(WINDOW),
         realized_vol=pl.col("close_return").rolling_std(WINDOW, ddof=0),
-        has_corporate_action_jump=pl.col("close_return")
-        .abs()
-        .rolling_max(WINDOW)
-        .gt(CORPORATE_ACTION_THRESHOLD),
         window_start_index=pl.col("row_index") - WINDOW + 1,
         window_end_index=pl.col("row_index"),
         window_start=pl.col("trade_timestamp").shift(WINDOW - 1),
@@ -265,8 +260,6 @@ def _latest_window(
     )
     if latest.is_empty():
         raise SimilarityError("Latest 10-day setup is unavailable")
-    if latest["has_corporate_action_jump"][0]:
-        raise SimilarityError("Latest setup contains a likely corporate-action jump")
     return latest
 
 
@@ -277,7 +270,6 @@ def _same_context(candidates: pl.LazyFrame, latest: dict[str, Any]) -> pl.LazyFr
         pl.col("ema_200_side") == latest["ema_200_side"],
         pl.col("volatility_regime") == latest["volatility_regime"],
         pl.col("yearly_position_regime") == latest["yearly_position_regime"],
-        ~pl.col("has_corporate_action_jump"),
     ]
     return candidates.filter(pl.all_horizontal(filters))
 
@@ -395,7 +387,6 @@ def find_similar_setups(
     counts = (
         candidates.select(
             pl.len().alias("eligible_candidate_count"),
-            pl.col("has_corporate_action_jump").sum().alias("jump_excluded_count"),
         )
         .collect()
         .row(0, named=True)

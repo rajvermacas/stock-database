@@ -31,7 +31,6 @@ python .agents/skills/find-similar-stock-setups/scripts/find_similar_setups.py \
 - Use balanced combined distance across subgroups.
 - Enforce hard context gates and non-overlapping historical matches.
 - Return all available matches when fewer than 200 survive.
-- Exclude windows containing daily close moves above 40%.
 - Use no recency weighting.
 
 Never silently relax gates, permit overlap, or invent missing data.
