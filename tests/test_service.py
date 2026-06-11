@@ -10,19 +10,16 @@ from stock_data.yahoo import DownloadBatch
 
 
 class FakeStore:
-    def __init__(self, latest=None, failed_symbol=None) -> None:
-        self.latest = latest
+    def __init__(self, changed=True, failed_symbol=None) -> None:
+        self.changed = changed
         self.failed_symbol = failed_symbol
-        self.upserted_symbols = []
+        self.replaced_symbols = []
 
-    def latest_timestamp(self, symbol):
+    def replace(self, symbol, frame):
         if symbol == self.failed_symbol:
             raise ValueError("invalid parquet")
-        return self.latest
-
-    def upsert(self, symbol, frame):
-        self.upserted_symbols.append(symbol)
-        return WriteResult(True, frame.height, frame.height)
+        self.replaced_symbols.append(symbol)
+        return WriteResult(self.changed, frame.height, frame.height)
 
 
 class FakeYahoo:
@@ -60,13 +57,13 @@ class FakeIndicators:
 
 def build_service(
     interval="30m",
-    latest=None,
+    changed=True,
     errors=None,
     failed_symbol=None,
     indicator_failed_symbol=None,
 ):
     service = UpdateService(
-        FakeStore(latest, failed_symbol),
+        FakeStore(changed, failed_symbol),
         FakeYahoo(errors),
         FakeIndicators(indicator_failed_symbol),
         get_interval(interval),
@@ -75,28 +72,28 @@ def build_service(
     return service
 
 
-def test_intraday_incremental_request_includes_next_candle_date() -> None:
-    latest = datetime(2026, 6, 8, 14, 30, tzinfo=IST)
-    service = build_service(latest=latest)
-    service.update(["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
-    assert service.yahoo.requests == [(["TCS.NS"], date(2026, 6, 8), date(2026, 6, 8))]
+def test_update_requests_full_configured_history_for_all_symbols() -> None:
+    service = build_service(interval="30m")
+    service.update(
+        ["TCS.NS", "INFY.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST)
+    )
+    assert service.yahoo.requests == [
+        (["TCS.NS", "INFY.NS"], date(2000, 1, 1), date(2026, 6, 8))
+    ]
 
 
-def test_explicit_range_continues_after_failure() -> None:
+def test_yahoo_failure_is_isolated() -> None:
     service = build_service(errors={"BAD.NS": "missing"})
     summary = service.update(
         ["TCS.NS", "BAD.NS"],
         datetime(2026, 6, 8, 16, 30, tzinfo=IST),
-        date(2026, 6, 8),
-        date(2026, 6, 8),
     )
     assert summary.count(SymbolStatus.SUCCESS) == 1
     assert summary.count(SymbolStatus.FAILED) == 1
 
 
-def test_planning_storage_failure_is_isolated() -> None:
-    latest = datetime(2026, 6, 8, 14, 30, tzinfo=IST)
-    service = build_service(latest=latest, failed_symbol="BAD.NS")
+def test_storage_failure_is_isolated() -> None:
+    service = build_service(failed_symbol="BAD.NS")
     summary = service.update(
         ["BAD.NS", "TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST)
     )
@@ -104,12 +101,10 @@ def test_planning_storage_failure_is_isolated() -> None:
     assert summary.count(SymbolStatus.SUCCESS) == 1
 
 
-def test_indicator_backfill_runs_for_planned_unchanged_symbol() -> None:
-    latest = datetime(2026, 6, 9, 14, 30, tzinfo=IST)
-    service = build_service(latest=latest)
-    summary = service.update(["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
+def test_unchanged_full_history_does_not_force_indicator_recalculation() -> None:
+    service = build_service(changed=False)
+    service.update(["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
     assert service.indicators.requests == [("TCS.NS", False)]
-    assert summary.count(SymbolStatus.SUCCESS) == 1
 
 
 def test_changed_price_triggers_indicator_refresh() -> None:
@@ -122,10 +117,28 @@ def test_indicator_failure_marks_symbol_failed_after_price_write() -> None:
     service = build_service(indicator_failed_symbol="TCS.NS")
     summary = service.update(["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
     assert summary.count(SymbolStatus.FAILED) == 1
-    assert service.store.upserted_symbols == ["TCS.NS"]
+    assert service.store.replaced_symbols == ["TCS.NS"]
 
 
 def test_price_failure_does_not_refresh_indicators() -> None:
     service = build_service(errors={"BAD.NS": "missing"})
     service.update(["BAD.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
     assert service.indicators.requests == []
+
+
+def test_normalization_failure_does_not_replace_prices(mocker) -> None:
+    service = build_service()
+    malformed = pd.DataFrame(
+        {"Close": [1.0]},
+        index=pd.DatetimeIndex(["2026-06-08 09:15"], name="Datetime"),
+    )
+    mocker.patch.object(
+        service.yahoo,
+        "download",
+        return_value=DownloadBatch({"TCS.NS": malformed}, {}),
+    )
+    summary = service.update(
+        ["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST)
+    )
+    assert summary.count(SymbolStatus.FAILED) == 1
+    assert service.store.replaced_symbols == []

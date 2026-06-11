@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
@@ -61,16 +60,12 @@ class UpdateService:
         self,
         symbols: list[str],
         now: datetime,
-        start: date | None = None,
-        end: date | None = None,
     ) -> UpdateSummary:
         if now.tzinfo is None:
             raise ValueError("now must be timezone-aware")
-        if (start is None) != (end is None):
-            raise ValueError("start and end must be supplied together")
-        groups, results = self._plan(symbols, now.date(), start, end)
-        for (request_start, request_end), group in groups.items():
-            results.extend(self._process_group(group, request_start, request_end, now))
+        results = self._process_group(
+            symbols, self.initial_start, now.date(), now
+        )
         results = self._refresh_indicators(results)
         ordered = sorted(results, key=lambda result: symbols.index(result.symbol))
         return UpdateSummary(tuple(ordered))
@@ -109,37 +104,6 @@ class UpdateService:
                 str(exc),
             )
 
-    def _plan(
-        self,
-        symbols: list[str],
-        today: date,
-        start: date | None,
-        end: date | None,
-    ) -> tuple[dict[tuple[date, date], list[str]], list[SymbolResult]]:
-        groups: dict[tuple[date, date], list[str]] = defaultdict(list)
-        results: list[SymbolResult] = []
-        for symbol in symbols:
-            try:
-                request_start = start or self._incremental_start(symbol)
-            except Exception as exc:
-                LOGGER.exception("Update planning failed symbol=%s", symbol)
-                results.append(
-                    SymbolResult(symbol, SymbolStatus.FAILED, 0, 0, str(exc))
-                )
-                continue
-            request_end = min(end or today, today)
-            if request_start > request_end:
-                results.append(SymbolResult(symbol, SymbolStatus.UNCHANGED, 0, 0, None))
-            else:
-                groups[(request_start, request_end)].append(symbol)
-        return groups, results
-
-    def _incremental_start(self, symbol: str) -> date:
-        latest = self.store.latest_timestamp(symbol)
-        if latest is None:
-            return self.initial_start
-        return self.interval.next_request_start(latest).date()
-
     def _process_group(
         self, symbols: list[str], start: date, end: date, now: datetime
     ) -> list[SymbolResult]:
@@ -156,7 +120,7 @@ class UpdateService:
             return SymbolResult(symbol, SymbolStatus.FAILED, 0, 0, errors[symbol])
         try:
             normalized = normalize_symbol(symbol, frames[symbol], self.interval, now)
-            write = self.store.upsert(symbol, normalized)
+            write = self.store.replace(symbol, normalized)
             status = SymbolStatus.SUCCESS if write.changed else SymbolStatus.UNCHANGED
             LOGGER.info(
                 "Update complete symbol=%s interval=%s status=%s downloaded_rows=%d stored_rows=%d",
