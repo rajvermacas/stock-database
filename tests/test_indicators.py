@@ -87,6 +87,19 @@ def test_output_has_strict_finite_schema() -> None:
     assert np.isfinite(result.select(INDICATOR_COLUMNS).to_numpy()).all()
 
 
+def test_non_finite_indicator_rows_are_excluded() -> None:
+    prices = price_history().with_columns(
+        pl.when(pl.int_range(pl.len()) < 400)
+        .then(0)
+        .otherwise(pl.col("volume"))
+        .alias("volume")
+    )
+    result = calculate_indicators(prices)
+    assert result is not None
+    assert result["trade_timestamp"].min() == prices["trade_timestamp"][400]
+    assert np.isfinite(result.select(INDICATOR_COLUMNS).to_numpy()).all()
+
+
 def test_insufficient_history_returns_none() -> None:
     assert calculate_indicators(price_history(365)) is None
 

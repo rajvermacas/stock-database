@@ -59,6 +59,11 @@ def calculate_indicators(prices: pl.DataFrame) -> pl.DataFrame | None:
             *INDICATOR_SCHEMA
         )
         result = result.cast(INDICATOR_SCHEMA, strict=True)
+        result = result.filter(
+            pl.all_horizontal(
+                [pl.col(column).is_finite() for column in INDICATOR_COLUMNS]
+            )
+        )
         _validate_result(result)
         return result
     except (TypeError, ValueError, pl.exceptions.PolarsError) as exc:
