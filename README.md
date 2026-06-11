@@ -1,10 +1,10 @@
 # Stock Data Repository
 
-A local repository for raw NSE OHLCV data downloaded from Yahoo Finance.
+A local repository for adjusted OHLCV data downloaded from Yahoo Finance.
 It stores one validated Parquet file per symbol for later analytics with Polars,
 DuckDB, or similar tools.
 
-It also maintains precalculated technical indicators from persisted raw prices.
+It also maintains precalculated technical indicators from persisted adjusted prices.
 It does not include a web UI, screening, backtesting, automated symbol discovery,
 or historical gap repair.
 
@@ -54,15 +54,15 @@ INFY.NS
 
 ## Update Behavior
 
-A normal update downloads from the configured initial date for a new symbol. For
-an existing symbol, it downloads strictly after the greatest stored
-`trade_timestamp`. It does not detect or repair older gaps.
+Every update downloads full history from `download.initial_start_date` through
+the latest completed candle for only the configured interval. A changed result
+atomically replaces that interval's complete symbol file; an equal result is
+left unchanged. Other interval directories are not read or modified.
 
-Supplying both `--start-date` and `--end-date` performs a bounded inclusive
-upsert. Newly downloaded rows replace stored rows for matching dates; rows
-outside the range remain unchanged.
-
-Raw, unadjusted Yahoo prices are stored. Only completed candles are retained.
+Yahoo adjusts Open, High, Low, and Close for corporate actions. Volume is
+persisted unchanged as Yahoo-provided volume. No raw prices, adjusted-close
+helper column, dividends, or split records are stored. Only completed candles
+are retained.
 Intraday candles are complete after their duration, daily candles after 4:00 PM
 IST, and the current weekly/monthly/quarterly period is excluded.
 
@@ -82,8 +82,8 @@ fails, and the command returns exit code `1` after a partial failure.
 
 When indicators are enabled, every nonfailed symbol in the selected configured
 interval is checked after its price update. Changed prices force recalculation.
-Missing or stale indicator files are backfilled, including for existing price
-files with no newly downloaded candle. Other intervals are not scanned.
+Missing or stale indicator files are backfilled, including when full downloaded
+price history is unchanged. Other intervals are not scanned.
 
 ## Storage
 
@@ -117,11 +117,11 @@ replaced, and are sorted by `trade_timestamp`.
 | `close` | float64 |
 | `volume` | int64 |
 
-Raw price files remain unchanged by indicator processing.
+Adjusted price files remain unchanged by indicator processing.
 
 ## Indicators
 
-TA-Lib calculates standard indicators from full persisted raw, unadjusted OHLCV
+TA-Lib calculates standard indicators from full persisted adjusted OHLCV
 history. Indicator files use `indicators/<interval>/<symbol>.parquet`; matching
 metadata files contain a source-price fingerprint used to detect stale output.
 
@@ -142,8 +142,7 @@ previous valid indicator file, but marks that symbol update failed.
 | `roc_20`, `obv` | Rate of change and on-balance volume |
 | `trailing_365d_high`, `trailing_365d_low`, `distance_from_365d_high_percent` | Trailing calendar-year context |
 
-No simple moving averages are calculated. Corporate actions may distort signals
-because source prices are raw rather than adjusted.
+No simple moving averages are calculated.
 
 ## Development
 

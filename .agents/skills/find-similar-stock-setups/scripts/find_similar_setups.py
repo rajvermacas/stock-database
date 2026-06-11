@@ -403,7 +403,7 @@ def find_similar_setups(
             "context_rejected_count": counts["eligible_candidate_count"] - ranked.height,
             "surviving_candidate_count": ranked.height,
             "match_count": matches.height,
-            "warning": "Prices and indicators are raw, unadjusted; corporate actions may distort history.",
+            "warning": "Prices are adjusted for corporate actions; volume is Yahoo-provided.",
         },
         "summary": _summary(matches),
         "matches": records,

@@ -36,5 +36,5 @@ python .agents/skills/find-similar-stock-setups/scripts/find_similar_setups.py \
 
 Never silently relax gates, permit overlap, or invent missing data.
 
-Similarity distance is not a probability. Prices and indicators are raw, unadjusted;
-corporate actions may distort results.
+Similarity distance is not a probability. Prices and indicators use adjusted price
+history; volume is Yahoo-provided.

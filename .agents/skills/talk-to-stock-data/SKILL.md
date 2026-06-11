@@ -92,8 +92,9 @@ result = frame.filter(pl.col("close") > pl.col("ema_200")).collect()
 - Interpret "last N trading periods" as the latest N available observations per symbol.
 - For return across N observations, calculate `last_close / first_close - 1`.
 - Distinguish observations from transitions when wording makes the difference material.
-- Use adjusted-return language only if adjusted-price columns exist. Current data is raw OHLCV.
-- Treat precalculated indicators as raw-price indicators; corporate actions may distort them.
+- Treat stored prices as adjusted for corporate actions.
+- Treat volume as Yahoo-provided and not independently adjusted by the application.
+- Treat precalculated indicators as adjusted-price indicators.
 - Precalculated indicator files start only after full 365-calendar-day history and
   contain no partial/null rows. Disclose symbols excluded because indicator files or
   requested lookback rows are absent.

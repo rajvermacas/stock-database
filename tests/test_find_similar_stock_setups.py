@@ -89,6 +89,9 @@ def test_real_query_returns_auditable_non_overlapping_matches() -> None:
         "CHENNPETRO.NS", Path("market-data/prices"), Path("market-data/indicators")
     )
     assert result["metadata"]["source_interval"] == "1d"
+    assert result["metadata"]["warning"] == (
+        "Prices are adjusted for corporate actions; volume is Yahoo-provided."
+    )
     assert 0 < result["metadata"]["match_count"] <= 200
     matches = result["matches"]
     assert all("combined_distance" in row for row in matches)

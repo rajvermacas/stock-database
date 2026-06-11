@@ -8,7 +8,7 @@
 - Indicator layout: `market-data/indicators/<interval>/<symbol>.parquet`
 - Indicator metadata: `market-data/indicators/<interval>/<symbol>.metadata.json`
 - Time zone: `Asia/Kolkata`
-- Data is raw, unadjusted OHLCV.
+- Price columns are adjusted for corporate actions; volume is Yahoo-provided.
 
 | Column | Polars type | Meaning |
 |---|---|---|
@@ -22,7 +22,7 @@
 
 ## Precalculated Indicators
 
-Indicators derive from raw, unadjusted prices. Use them only for the exact interval
+Indicators derive from adjusted prices. Use them only for the exact interval
 directory containing them. Never resample precalculated indicators or join them to a
 derived timeframe.
 
