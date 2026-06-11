@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from stock_data.cli import app
@@ -33,14 +34,15 @@ def test_update_symbol_returns_one_on_partial_failure(mocker, tmp_path: Path) ->
     assert "Failed: 1" in result.stdout
 
 
-def test_unpaired_range_returns_validation_exit(tmp_path: Path) -> None:
+@pytest.mark.parametrize("option", ["--start-date", "--end-date"])
+def test_update_all_rejects_removed_date_options(tmp_path: Path, option: str) -> None:
     config = tmp_path / "config.toml"
     config.write_text("", encoding="utf-8")
     result = runner.invoke(
-        app, ["--config", str(config), "update-all", "--start-date", "2026-06-01"]
+        app, ["--config", str(config), "update-all", option, "2026-06-01"]
     )
     assert result.exit_code == 2
-    assert "must be supplied together" in result.output
+    assert "No such option" in result.output
 
 
 def test_run_uses_configured_interval(mocker, tmp_path: Path) -> None:
@@ -64,7 +66,9 @@ def test_run_uses_configured_interval(mocker, tmp_path: Path) -> None:
     indicator_updater = mocker.patch("stock_data.cli.IndicatorUpdater")
     update = mocker.patch("stock_data.cli.UpdateService").return_value.update
     update.return_value = UpdateSummary(())
-    _run(config, ["TCS.NS"], None, None)
+    _run(config, ["TCS.NS"])
     assert store.call_args.args[1].name == "30m"
     assert indicator_store.call_args.args[1].name == "30m"
     assert indicator_updater.call_args.args[0] is store.return_value
+    update.assert_called_once()
+    assert update.call_args.args[0] == ["TCS.NS"]

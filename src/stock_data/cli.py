@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -39,32 +39,25 @@ def main(
 @app.command("update-all")
 def update_all(
     ctx: typer.Context,
-    start_date: Annotated[str | None, typer.Option()] = None,
-    end_date: Annotated[str | None, typer.Option()] = None,
 ) -> None:
     """Update every symbol in the configured CSV file."""
-    _execute(ctx.obj, None, start_date, end_date)
+    _execute(ctx.obj, None)
 
 
 @app.command("update-symbol")
 def update_symbol(
     ctx: typer.Context,
     symbol: str,
-    start_date: Annotated[str | None, typer.Option()] = None,
-    end_date: Annotated[str | None, typer.Option()] = None,
 ) -> None:
     """Update one Yahoo Finance symbol."""
-    _execute(ctx.obj, symbol.strip(), start_date, end_date)
+    _execute(ctx.obj, symbol.strip())
 
 
 def _execute(
     state: State,
     symbol: str | None,
-    start_date: str | None,
-    end_date: str | None,
 ) -> None:
     try:
-        start, end = _parse_dates(start_date, end_date)
         config = load_config(state.config_path)
         configure_logging(config.paths.logs_dir)
         config.paths.prices_dir.mkdir(parents=True, exist_ok=True)
@@ -81,7 +74,7 @@ def _execute(
                 f"{config.paths.indicators_dir / config.yahoo.interval}"
             )
         started = time.monotonic()
-        summary = _run(config, symbols, start, end)
+        summary = _run(config, symbols)
         LOGGER.info(
             "Command completed duration_seconds=%.3f", time.monotonic() - started
         )
@@ -105,8 +98,6 @@ def _execute(
 def _run(
     config: AppConfig,
     symbols: list[str],
-    start_date: date | None,
-    end_date: date | None,
 ) -> UpdateSummary:
     interval = get_interval(config.yahoo.interval)
     price_store = PriceStore(config.paths.prices_dir, interval)
@@ -121,24 +112,7 @@ def _run(
         interval,
         config.download.initial_start_date,
     )
-    return service.update(symbols, datetime.now(timezone.utc), start_date, end_date)
-
-
-def _parse_dates(
-    start_date: str | None, end_date: str | None
-) -> tuple[date | None, date | None]:
-    if (start_date is None) != (end_date is None):
-        raise ValueError("--start-date and --end-date must be supplied together")
-    if start_date is None or end_date is None:
-        return None, None
-    try:
-        start = date.fromisoformat(start_date)
-        end = date.fromisoformat(end_date)
-    except ValueError as exc:
-        raise ValueError("dates must use YYYY-MM-DD format") from exc
-    if start > end:
-        raise ValueError("--start-date must not be after --end-date")
-    return start, end
+    return service.update(symbols, datetime.now(timezone.utc))
 
 
 def _print_summary(summary: UpdateSummary) -> None:
