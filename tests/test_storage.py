@@ -60,9 +60,7 @@ def test_replace_equal_history_is_unchanged(tmp_path: Path) -> None:
     assert store.path_for("TCS.NS").read_bytes() == original
 
 
-def test_replace_write_failure_preserves_existing_file(
-    mocker, tmp_path: Path
-) -> None:
+def test_replace_write_failure_preserves_existing_file(mocker, tmp_path: Path) -> None:
     store = PriceStore(tmp_path, get_interval("1d"))
     store.write_atomic("TCS.NS", frame(100.0))
     original = store.path_for("TCS.NS").read_bytes()

@@ -63,9 +63,7 @@ class UpdateService:
     ) -> UpdateSummary:
         if now.tzinfo is None:
             raise ValueError("now must be timezone-aware")
-        results = self._process_group(
-            symbols, self.initial_start, now.date(), now
-        )
+        results = self._process_group(symbols, self.initial_start, now.date(), now)
         results = self._refresh_indicators(results)
         ordered = sorted(results, key=lambda result: symbols.index(result.symbol))
         return UpdateSummary(tuple(ordered))

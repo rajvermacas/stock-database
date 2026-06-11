@@ -5,9 +5,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-SCRIPT = Path(
-    ".agents/skills/find-similar-stock-setups/scripts/find_similar_setups.py"
-)
+SCRIPT = Path(".agents/skills/find-similar-stock-setups/scripts/find_similar_setups.py")
 SPEC = importlib.util.spec_from_file_location("find_similar_stock_setups", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 similarity = importlib.util.module_from_spec(SPEC)
@@ -97,8 +95,10 @@ def test_real_query_returns_auditable_non_overlapping_matches() -> None:
     assert all("combined_distance" in row for row in matches)
     assert all("chart_shape_distance" in row for row in matches)
     ranges = [
-        (pl.Series([row["window_start"]]).str.to_datetime()[0],
-         pl.Series([row["window_end"]]).str.to_datetime()[0])
+        (
+            pl.Series([row["window_start"]]).str.to_datetime()[0],
+            pl.Series([row["window_end"]]).str.to_datetime()[0],
+        )
         for row in matches
     ]
     assert all(

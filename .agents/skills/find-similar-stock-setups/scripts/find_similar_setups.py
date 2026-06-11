@@ -62,11 +62,15 @@ def load_symbol_frame(
             "1d", prices_root, indicators_root, [symbol], None, None
         )
     except Exception as exc:
-        raise SimilarityError(f"Unable to load exact daily data for {symbol}: {exc}") from exc
+        raise SimilarityError(
+            f"Unable to load exact daily data for {symbol}: {exc}"
+        ) from exc
 
 
 def _window_list(expression: pl.Expr) -> pl.Expr:
-    return pl.concat_list([expression.shift(offset) for offset in range(WINDOW - 1, -1, -1)])
+    return pl.concat_list(
+        [expression.shift(offset) for offset in range(WINDOW - 1, -1, -1)]
+    )
 
 
 def _base_features(frame: pl.LazyFrame) -> pl.LazyFrame:
@@ -91,8 +95,9 @@ def _path_columns(frame: pl.LazyFrame) -> pl.LazyFrame:
     expressions: list[pl.Expr] = []
     for column in ("open", "high", "low", "close"):
         expressions.append(
-            _window_list(pl.col(column) / pl.col("close").shift(WINDOW - 1) - 1)
-            .alias(f"path_{column}")
+            _window_list(pl.col(column) / pl.col("close").shift(WINDOW - 1) - 1).alias(
+                f"path_{column}"
+            )
         )
     for column in (
         "close_return",
@@ -111,8 +116,9 @@ def _path_columns(frame: pl.LazyFrame) -> pl.LazyFrame:
     ):
         expressions.append(_window_list(pl.col(column)).alias(f"path_{column}"))
     expressions.append(
-        _window_list(pl.col("volume").cast(pl.Float64) / pl.col("volume_mean"))
-        .alias("path_normalized_volume")
+        _window_list(pl.col("volume").cast(pl.Float64) / pl.col("volume_mean")).alias(
+            "path_normalized_volume"
+        )
     )
     return frame.with_columns(expressions)
 
@@ -179,10 +185,23 @@ def _vector_columns(frame: pl.LazyFrame) -> pl.LazyFrame:
             ["path_open", "path_high", "path_low", "path_close", "path_close_return"]
         ),
         pace_vector=pl.concat_list(
-            ["return_10", "pace_slope", "pace_acceleration", "up_ratio", "max_up", "max_down"]
+            [
+                "return_10",
+                "pace_slope",
+                "pace_acceleration",
+                "up_ratio",
+                "max_up",
+                "max_down",
+            ]
         ),
         candle_volatility_vector=pl.concat_list(
-            ["path_gap", "path_intraday_range", "path_candle_body", "realized_vol", "path_atr_percent_14"]
+            [
+                "path_gap",
+                "path_intraday_range",
+                "path_candle_body",
+                "realized_vol",
+                "path_atr_percent_14",
+            ]
         ),
         volume_vector=pl.concat_list(
             [
@@ -209,10 +228,9 @@ def _with_volatility_regime(
 
 
 def _all_window_features(frame: pl.LazyFrame) -> pl.LazyFrame:
-    return (
-        _vector_columns(_context_columns(_path_columns(_base_features(frame))))
-        .filter(pl.col("row_index") >= WINDOW - 1)
-    )
+    return _vector_columns(
+        _context_columns(_path_columns(_base_features(frame)))
+    ).filter(pl.col("row_index") >= WINDOW - 1)
 
 
 def _candidate_windows(frame: pl.LazyFrame) -> pl.LazyFrame:
@@ -222,10 +240,14 @@ def _candidate_windows(frame: pl.LazyFrame) -> pl.LazyFrame:
 
 
 def _atr_thresholds(candidates: pl.LazyFrame) -> tuple[float, float]:
-    thresholds = candidates.select(
-        pl.col("atr_percent_14").quantile(1 / 3).alias("low"),
-        pl.col("atr_percent_14").quantile(2 / 3).alias("high"),
-    ).collect().row(0, named=True)
+    thresholds = (
+        candidates.select(
+            pl.col("atr_percent_14").quantile(1 / 3).alias("low"),
+            pl.col("atr_percent_14").quantile(2 / 3).alias("high"),
+        )
+        .collect()
+        .row(0, named=True)
+    )
     if thresholds["low"] is None or thresholds["high"] is None:
         raise SimilarityError("Insufficient candidate history for volatility regimes")
     return thresholds["low"], thresholds["high"]
@@ -268,7 +290,9 @@ def _standardized_distance(vector: str, latest: list[float]) -> pl.Expr:
     return pl.mean_horizontal(components)
 
 
-def calculate_distances(candidates: pl.LazyFrame, latest: dict[str, Any]) -> pl.LazyFrame:
+def calculate_distances(
+    candidates: pl.LazyFrame, latest: dict[str, Any]
+) -> pl.LazyFrame:
     raw_names = []
     expressions = []
     for group in SUBGROUPS:
@@ -298,12 +322,12 @@ def calculate_distances(candidates: pl.LazyFrame, latest: dict[str, Any]) -> pl.
 
 def attach_future_outcomes(frame: pl.LazyFrame) -> pl.LazyFrame:
     outcomes = [
-        (pl.col("close").shift(-period) / pl.col("close") - 1).alias(
-            f"return_{period}"
-        )
+        (pl.col("close").shift(-period) / pl.col("close") - 1).alias(f"return_{period}")
         for period in FUTURE_PERIODS
     ]
-    future_highs = [pl.col("high").shift(-i) / pl.col("close") - 1 for i in range(1, 31)]
+    future_highs = [
+        pl.col("high").shift(-i) / pl.col("close") - 1 for i in range(1, 31)
+    ]
     future_lows = [pl.col("low").shift(-i) / pl.col("close") - 1 for i in range(1, 31)]
     future_closes = [pl.col("close").shift(-i) for i in range(0, 31)]
     drawdowns = [
@@ -345,7 +369,10 @@ def _serialize(value: Any) -> Any:
 
 def _summary(matches: pl.DataFrame) -> dict[str, Any]:
     return matches.select(
-        *[pl.col(f"return_{period}").mean().alias(f"mean_return_{period}") for period in FUTURE_PERIODS],
+        *[
+            pl.col(f"return_{period}").mean().alias(f"mean_return_{period}")
+            for period in FUTURE_PERIODS
+        ],
         pl.col("mfe_30").mean().alias("mean_mfe_30"),
         pl.col("mae_30").mean().alias("mean_mae_30"),
         pl.col("max_close_drawdown_30").mean().alias("mean_max_close_drawdown_30"),
@@ -355,7 +382,9 @@ def _summary(matches: pl.DataFrame) -> dict[str, Any]:
 def find_similar_setups(
     symbol: str, prices_root: Path, indicators_root: Path
 ) -> dict[str, Any]:
-    frame = attach_future_outcomes(load_symbol_frame(symbol, prices_root, indicators_root))
+    frame = attach_future_outcomes(
+        load_symbol_frame(symbol, prices_root, indicators_root)
+    )
     candidate_windows = _candidate_windows(frame)
     low_threshold, high_threshold = _atr_thresholds(candidate_windows)
     latest_frame = _latest_window(frame, low_threshold, high_threshold)
@@ -363,10 +392,14 @@ def find_similar_setups(
     candidates = _with_volatility_regime(
         candidate_windows, low_threshold, high_threshold
     )
-    counts = candidates.select(
-        pl.len().alias("eligible_candidate_count"),
-        pl.col("has_corporate_action_jump").sum().alias("jump_excluded_count"),
-    ).collect().row(0, named=True)
+    counts = (
+        candidates.select(
+            pl.len().alias("eligible_candidate_count"),
+            pl.col("has_corporate_action_jump").sum().alias("jump_excluded_count"),
+        )
+        .collect()
+        .row(0, named=True)
+    )
     gated = _same_context(candidates, latest)
     ranked = (
         calculate_distances(gated, latest)
@@ -390,7 +423,9 @@ def find_similar_setups(
         {key: _serialize(value) for key, value in row.items()}
         for row in matches.select(output_columns).iter_rows(named=True)
     ]
-    LOGGER.info("symbol=%s candidates=%d matches=%d", symbol, ranked.height, matches.height)
+    LOGGER.info(
+        "symbol=%s candidates=%d matches=%d", symbol, ranked.height, matches.height
+    )
     return {
         "metadata": {
             "symbol": symbol,
@@ -400,7 +435,8 @@ def find_similar_setups(
             "latest_setup_end": _serialize(latest["window_end"]),
             "latest_close": latest["close"],
             **counts,
-            "context_rejected_count": counts["eligible_candidate_count"] - ranked.height,
+            "context_rejected_count": counts["eligible_candidate_count"]
+            - ranked.height,
             "surviving_candidate_count": ranked.height,
             "match_count": matches.height,
             "warning": "Prices are adjusted for corporate actions; volume is Yahoo-provided.",
@@ -421,7 +457,11 @@ def _arguments() -> argparse.Namespace:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     args = _arguments()
-    print(json.dumps(find_similar_setups(args.symbol, args.prices_root, args.indicators_root)))
+    print(
+        json.dumps(
+            find_similar_setups(args.symbol, args.prices_root, args.indicators_root)
+        )
+    )
 
 
 if __name__ == "__main__":

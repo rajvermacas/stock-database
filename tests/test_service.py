@@ -74,9 +74,7 @@ def build_service(
 
 def test_update_requests_full_configured_history_for_all_symbols() -> None:
     service = build_service(interval="30m")
-    service.update(
-        ["TCS.NS", "INFY.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST)
-    )
+    service.update(["TCS.NS", "INFY.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
     assert service.yahoo.requests == [
         (["TCS.NS", "INFY.NS"], date(2000, 1, 1), date(2026, 6, 8))
     ]
@@ -137,8 +135,6 @@ def test_normalization_failure_does_not_replace_prices(mocker) -> None:
         "download",
         return_value=DownloadBatch({"TCS.NS": malformed}, {}),
     )
-    summary = service.update(
-        ["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST)
-    )
+    summary = service.update(["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
     assert summary.count(SymbolStatus.FAILED) == 1
     assert service.store.replaced_symbols == []
