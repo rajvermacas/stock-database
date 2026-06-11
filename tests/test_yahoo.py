@@ -6,7 +6,7 @@ from stock_data.config import YahooConfig
 from stock_data.yahoo import YahooClient
 
 
-def test_download_converts_end_and_uses_raw_prices(mocker) -> None:
+def test_download_converts_end_and_uses_adjusted_prices(mocker) -> None:
     frame = pd.DataFrame({"Close": [1.0]})
     download = mocker.patch("stock_data.yahoo.yf.download", return_value=frame)
     client = YahooClient(
@@ -15,7 +15,8 @@ def test_download_converts_end_and_uses_raw_prices(mocker) -> None:
     result = client.download(["TCS.NS"], date(2026, 6, 1), date(2026, 6, 5))
     assert "TCS.NS" in result.frames
     assert download.call_args.kwargs["end"] == "2026-06-06"
-    assert download.call_args.kwargs["auto_adjust"] is False
+    assert download.call_args.kwargs["auto_adjust"] is True
+    assert download.call_args.kwargs["actions"] is False
 
 
 def test_missing_batch_symbol_is_retried_once(mocker) -> None:

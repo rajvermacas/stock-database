@@ -102,7 +102,7 @@ class YahooClient:
             "start": start.isoformat(),
             "end": (end + timedelta(days=1)).isoformat(),
             "interval": self.config.interval,
-            "auto_adjust": False,
+            "auto_adjust": True,
             "actions": False,
             "progress": False,
             "timeout": self.config.timeout_seconds,
