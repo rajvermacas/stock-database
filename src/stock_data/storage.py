@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -48,26 +47,34 @@ class PriceStore:
         except (OSError, pl.exceptions.PolarsError, StorageError) as exc:
             raise StorageError(f"Unable to read {path}: {exc}") from exc
 
-    def latest_timestamp(self, symbol: str) -> datetime | None:
-        frame = self.read(symbol)
-        return None if frame is None else frame["trade_timestamp"].max()
-
-    def upsert(self, symbol: str, new_rows: pl.DataFrame) -> WriteResult:
-        self._validate(symbol, new_rows)
+    def replace(self, symbol: str, frame: pl.DataFrame) -> WriteResult:
+        self._validate(symbol, frame)
         existing = self.read(symbol)
-        merged = new_rows if existing is None else pl.concat([existing, new_rows])
-        merged = merged.unique(["symbol", "trade_timestamp"], keep="last").sort(
-            "trade_timestamp"
-        )
-        if existing is not None and existing.equals(merged):
-            return WriteResult(False, new_rows.height, existing.height)
-        self.write_atomic(symbol, merged)
-        return WriteResult(True, new_rows.height, merged.height)
+        if existing is not None and existing.equals(frame):
+            return WriteResult(False, frame.height, existing.height)
+        self.write_atomic(symbol, frame)
+        return WriteResult(True, frame.height, frame.height)
 
     def write_atomic(self, symbol: str, frame: pl.DataFrame) -> None:
         self._validate(symbol, frame)
         self.interval_dir.mkdir(parents=True, exist_ok=True)
         destination = self.path_for(symbol)
+        temporary = self._stage(symbol, frame)
+        backup = destination.with_name(f".{destination.name}.backup")
+        try:
+            if destination.exists():
+                os.replace(destination, backup)
+            os.replace(temporary, destination)
+        except OSError as exc:
+            destination.unlink(missing_ok=True)
+            if backup.exists():
+                os.replace(backup, destination)
+            raise StorageError(f"Unable to write {destination}: {exc}") from exc
+        finally:
+            temporary.unlink(missing_ok=True)
+            backup.unlink(missing_ok=True)
+
+    def _stage(self, symbol: str, frame: pl.DataFrame) -> Path:
         temporary: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -76,12 +83,11 @@ class PriceStore:
                 temporary = Path(file.name)
             frame.write_parquet(temporary)
             self._validate(symbol, pl.read_parquet(temporary))
-            os.replace(temporary, destination)
+            return temporary
         except (OSError, pl.exceptions.PolarsError, StorageError) as exc:
-            raise StorageError(f"Unable to write {destination}: {exc}") from exc
-        finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
+            raise StorageError(f"Unable to stage prices for {symbol}: {exc}") from exc
 
     @staticmethod
     def _validate(symbol: str, frame: pl.DataFrame) -> None:

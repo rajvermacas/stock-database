@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -6,7 +7,7 @@ import pytest
 
 from stock_data.intervals import IST, get_interval
 from stock_data.normalization import CANONICAL_SCHEMA
-from stock_data.storage import PriceStore, StorageError
+from stock_data.storage import PriceStore, StorageError, WriteResult
 
 
 def frame(close: float, timestamp: datetime | None = None) -> pl.DataFrame:
@@ -32,18 +33,68 @@ def test_path_for_includes_interval_directory(tmp_path: Path) -> None:
     )
 
 
-def test_upsert_replaces_matching_timestamp(tmp_path: Path) -> None:
+def test_replace_removes_rows_absent_from_full_download(tmp_path: Path) -> None:
+    store = PriceStore(tmp_path, get_interval("1d"))
+    old = pl.concat(
+        [
+            frame(100.0, datetime(2026, 6, 4, tzinfo=IST)),
+            frame(101.0, datetime(2026, 6, 5, tzinfo=IST)),
+        ]
+    )
+    replacement = frame(105.0, datetime(2026, 6, 5, tzinfo=IST))
+    store.write_atomic("TCS.NS", old)
+    result = store.replace("TCS.NS", replacement)
+    assert result.changed is True
+    assert result.downloaded_rows == 1
+    assert result.stored_rows == 1
+    assert store.read("TCS.NS").equals(replacement)  # type: ignore[union-attr]
+
+
+def test_replace_equal_history_is_unchanged(tmp_path: Path) -> None:
+    store = PriceStore(tmp_path, get_interval("1d"))
+    prices = frame(100.0)
+    store.write_atomic("TCS.NS", prices)
+    original = store.path_for("TCS.NS").read_bytes()
+    result = store.replace("TCS.NS", prices)
+    assert result == WriteResult(False, 1, 1)
+    assert store.path_for("TCS.NS").read_bytes() == original
+
+
+def test_replace_write_failure_preserves_existing_file(
+    mocker, tmp_path: Path
+) -> None:
     store = PriceStore(tmp_path, get_interval("1d"))
     store.write_atomic("TCS.NS", frame(100.0))
-    result = store.upsert("TCS.NS", frame(105.0))
-    assert result.changed is True
-    assert store.read("TCS.NS")["close"].to_list() == [105.0]  # type: ignore[index]
+    original = store.path_for("TCS.NS").read_bytes()
+    real_replace = os.replace
+    failed = False
+
+    def fail_destination_publish(source, destination):
+        nonlocal failed
+        if Path(destination) == store.path_for("TCS.NS") and not failed:
+            failed = True
+            raise OSError("disk full")
+        real_replace(source, destination)
+
+    mocker.patch("stock_data.storage.os.replace", side_effect=fail_destination_publish)
+    with pytest.raises(StorageError, match="disk full"):
+        store.replace("TCS.NS", frame(105.0))
+    assert store.path_for("TCS.NS").read_bytes() == original
 
 
-def test_latest_timestamp_and_duplicate_validation(tmp_path: Path) -> None:
+def test_replace_changes_only_configured_interval(tmp_path: Path) -> None:
+    daily = PriceStore(tmp_path, get_interval("1d"))
+    hourly = PriceStore(tmp_path, get_interval("1h"))
+    hourly.write_atomic("TCS.NS", frame(100.0))
+    hourly_original = hourly.path_for("TCS.NS").read_bytes()
+    daily.replace("TCS.NS", frame(105.0))
+    assert daily.path_for("TCS.NS").exists()
+    assert hourly.path_for("TCS.NS").read_bytes() == hourly_original
+
+
+def test_duplicate_validation(tmp_path: Path) -> None:
     store = PriceStore(tmp_path, get_interval("1h"))
-    store.write_atomic("TCS.NS", frame(100.0))
-    assert store.latest_timestamp("TCS.NS") == datetime(2026, 6, 5, tzinfo=IST)
+    store.interval_dir.mkdir(parents=True)
     pl.concat([frame(100.0), frame(101.0)]).write_parquet(store.path_for("TCS.NS"))
     with pytest.raises(StorageError, match="duplicate timestamps"):
         store.read("TCS.NS")
