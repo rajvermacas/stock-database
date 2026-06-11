@@ -33,3 +33,18 @@ def test_commands_document_contains_supported_commands(command: str) -> None:
 )
 def test_readme_documents_required_behavior(required: str) -> None:
     assert required in Path("README.md").read_text(encoding="utf-8")
+
+
+def test_similarity_skill_documents_required_contract() -> None:
+    text = Path(".agents/skills/find-similar-stock-setups/SKILL.md").read_text()
+    for required in [
+        "same stock",
+        "10-day",
+        "non-overlapping",
+        "raw, unadjusted",
+        "combined distance",
+        "subgroup",
+        "not a probability",
+        "find_similar_setups.py",
+    ]:
+        assert required in text
