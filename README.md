@@ -76,9 +76,13 @@ Select one through `[yahoo].interval`. The application sends requested ranges
 to Yahoo without enforcing retention limits; unavailable ranges fail with an
 interval-and-range-specific error.
 
-Symbols are downloaded in configurable batches. A symbol omitted from a
-successful batch is retried individually once. Other symbols continue when one
-fails, and the command returns exit code `1` after a partial failure.
+Symbols are downloaded in configurable batches. Each batch is fully normalized,
+written, and processed for indicators before the next batch is downloaded, so
+peak update RAM scales primarily with `yahoo.batch_size` rather than total symbol
+count. Lower batch sizes reduce peak RAM but increase request count and likely
+runtime. A symbol omitted from a successful batch is retried individually once.
+Other symbols continue when one fails, and the command returns exit code `1`
+after a partial failure.
 
 When indicators are enabled, every nonfailed symbol in the selected configured
 interval is checked after its price update. Changed prices force recalculation.

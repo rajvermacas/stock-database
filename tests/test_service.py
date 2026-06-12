@@ -49,13 +49,9 @@ class FakeYahoo:
                 },
                 index=pd.DatetimeIndex([f"{end} 09:15"], name="Datetime"),
             )
-            frames = {
-                symbol: frame for symbol in chunk if symbol not in self.errors
-            }
+            frames = {symbol: frame for symbol in chunk if symbol not in self.errors}
             errors = {
-                symbol: self.errors[symbol]
-                for symbol in chunk
-                if symbol in self.errors
+                symbol: self.errors[symbol] for symbol in chunk if symbol in self.errors
             }
             yield DownloadBatch(tuple(chunk), frames, errors)
 
