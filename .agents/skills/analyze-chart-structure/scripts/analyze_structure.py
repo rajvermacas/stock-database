@@ -223,7 +223,7 @@ def _formation(
 ) -> str:
     if high_slope is None or low_slope is None:
         return "insufficient"
-    flat = tolerance * 0.25
+    flat = max(tolerance * 0.02, 0.05)
     if abs(high_slope) <= flat and abs(low_slope) <= flat:
         return "horizontal-range"
     if high_slope > flat and low_slope > flat:
@@ -408,6 +408,81 @@ def _reversal_patterns(
     return [result for result in scorers if result is not None]
 
 
+def _boundary_pattern(
+    name: str,
+    rules: list[tuple[bool, float]],
+    support: float,
+    resistance: float,
+    close: float,
+    tolerance: float,
+    bullish: bool,
+) -> PatternResult:
+    contradictions = [
+        description
+        for (passed, _), description in zip(
+            rules,
+            ["high boundary slope differs", "low boundary slope differs", "weak width"],
+            strict=False,
+        )
+        if not passed
+    ]
+    confirmation = resistance + tolerance if bullish else support - tolerance
+    invalidation = support - tolerance if bullish else resistance + tolerance
+    return _pattern(
+        name,
+        _confidence(rules),
+        _status_for_levels(close, confirmation, invalidation, bullish),
+        ["multiple aligned swing highs", "multiple aligned swing lows"],
+        contradictions,
+        confirmation,
+        invalidation,
+    )
+
+
+def _boundary_patterns(
+    structure: dict[str, Any],
+    highs: list[dict[str, Any]],
+    lows: list[dict[str, Any]],
+    close: float,
+    tolerance: float,
+) -> list[PatternResult]:
+    high_slope = structure["high_boundary_slope"]
+    low_slope = structure["low_boundary_slope"]
+    support = structure["support"]
+    resistance = structure["resistance"]
+    if None in (high_slope, low_slope, support, resistance):
+        return []
+    flat = 0.05
+    width = resistance - support >= tolerance * 2
+    specifications = [
+        ("ascending-triangle", abs(high_slope) <= flat, low_slope > flat, True),
+        ("descending-triangle", high_slope < -flat, abs(low_slope) <= flat, False),
+        ("symmetrical-triangle", high_slope < -flat, low_slope > flat, True),
+        (
+            "ascending-channel",
+            high_slope > flat,
+            low_slope > flat and abs(high_slope - low_slope) <= 0.1,
+            True,
+        ),
+        (
+            "descending-channel",
+            high_slope < -flat,
+            low_slope < -flat and abs(high_slope - low_slope) <= 0.1,
+            False,
+        ),
+        ("horizontal-range", abs(high_slope) <= flat, abs(low_slope) <= flat, True),
+    ]
+    patterns = []
+    for name, high_rule, low_rule, bullish in specifications:
+        rules = [(high_rule, 2), (low_rule, 2), (width, 1)]
+        result = _boundary_pattern(
+            name, rules, support, resistance, close, tolerance, bullish
+        )
+        if result.confidence >= 0.5:
+            patterns.append(result)
+    return patterns
+
+
 def _serialize_pattern(pattern: PatternResult) -> dict[str, Any]:
     return {
         "name": pattern.name,
@@ -428,6 +503,10 @@ def analyze_frame(
     tolerance = float(collected["tolerance"].drop_nulls()[-1])
     close = float(collected["close"][-1])
     patterns = _reversal_patterns(pivots, close, tolerance)
+    structure = classify_structure(collected, pivots)
+    highs = [pivot for pivot in pivots if pivot["kind"] == "high"][-4:]
+    lows = [pivot for pivot in pivots if pivot["kind"] == "low"][-4:]
+    patterns.extend(_boundary_patterns(structure, highs, lows, close, tolerance))
     return {
         "data": {
             **metadata,
@@ -435,7 +514,7 @@ def analyze_frame(
             "start": collected["trade_timestamp"][0],
             "end": collected["trade_timestamp"][-1],
         },
-        "structure": classify_structure(collected, pivots),
+        "structure": structure,
         "patterns": [
             _serialize_pattern(pattern)
             for pattern in sorted(patterns, key=lambda item: (-item.confidence, item.name))

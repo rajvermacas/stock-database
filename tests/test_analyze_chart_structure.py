@@ -174,3 +174,26 @@ def test_close_above_neckline_confirms_double_bottom() -> None:
 def test_reversal_patterns_require_ordered_pivots(path_factory, name) -> None:
     result = structure.analyze_frame(price_frame(path_factory()), metadata())
     assert pattern_named(result, name)["confidence"] >= 0.5
+
+
+@pytest.mark.parametrize(
+    ("path_factory", "name"),
+    [
+        (ascending_triangle_path, "ascending-triangle"),
+        (descending_triangle_path, "descending-triangle"),
+        (symmetrical_triangle_path, "symmetrical-triangle"),
+        (ascending_channel_path, "ascending-channel"),
+        (descending_channel_path, "descending-channel"),
+        (range_path, "horizontal-range"),
+    ],
+)
+def test_detects_continuation_and_boundary_patterns(path_factory, name) -> None:
+    result = structure.analyze_frame(price_frame(path_factory()), metadata())
+    assert pattern_named(result, name)["confidence"] >= 0.5
+
+
+def test_close_beyond_boundary_reports_breakout() -> None:
+    result = structure.analyze_frame(
+        price_frame(ascending_triangle_path() + [120, 123]), metadata()
+    )
+    assert result["structure"]["breakout_state"] == "breakout"
