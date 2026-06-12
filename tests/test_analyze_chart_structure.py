@@ -141,3 +141,36 @@ def test_classify_structure_identifies_horizontal_range() -> None:
     closes = [100, 103, 101, 104, 100, 103] * 10
     result = structure.analyze_frame(price_frame(closes), metadata())
     assert result["structure"]["formation"] == "horizontal-range"
+
+
+def test_developing_double_bottom_has_levels_and_contradictions() -> None:
+    closes = (
+        [120 - index for index in range(20)]
+        + [101, 99, 102, 106, 103, 100, 102, 105, 104, 103] * 4
+    )
+    result = structure.analyze_frame(price_frame(closes), metadata())
+    pattern = pattern_named(result, "double-bottom")
+    assert pattern["status"] == "developing"
+    assert pattern["confirmation_level"] is not None
+    assert pattern["invalidation_level"] is not None
+    assert pattern["evidence"]
+
+
+def test_close_above_neckline_confirms_double_bottom() -> None:
+    result = structure.analyze_frame(
+        price_frame(double_bottom_path() + [120, 123]), metadata()
+    )
+    assert pattern_named(result, "double-bottom")["status"] == "confirmed"
+
+
+@pytest.mark.parametrize(
+    ("path_factory", "name"),
+    [
+        (double_top_path, "double-top"),
+        (head_shoulders_path, "head-and-shoulders"),
+        (inverse_head_shoulders_path, "inverse-head-and-shoulders"),
+    ],
+)
+def test_reversal_patterns_require_ordered_pivots(path_factory, name) -> None:
+    result = structure.analyze_frame(price_frame(path_factory()), metadata())
+    assert pattern_named(result, name)["confidence"] >= 0.5

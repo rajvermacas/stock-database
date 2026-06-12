@@ -33,6 +33,17 @@ class AnalysisRequest:
     historical: bool
 
 
+@dataclass(frozen=True)
+class PatternResult:
+    name: str
+    confidence: float
+    status: str
+    evidence: list[str]
+    contradictions: list[str]
+    confirmation_level: float | None
+    invalidation_level: float | None
+
+
 def validate_request(
     symbol: str,
     interval: str,
@@ -254,11 +265,169 @@ def classify_structure(frame: pl.DataFrame, pivots: list[dict[str, Any]]) -> dic
     }
 
 
+def _latest_sequence(
+    pivots: list[dict[str, Any]], kinds: tuple[str, ...]
+) -> list[dict[str, Any]] | None:
+    for end in range(len(pivots), len(kinds) - 1, -1):
+        sequence = pivots[end - len(kinds) : end]
+        if tuple(pivot["kind"] for pivot in sequence) == kinds:
+            return sequence
+    return None
+
+
+def _confidence(rules: list[tuple[bool, float]]) -> float:
+    total = sum(weight for _, weight in rules)
+    return round(sum(weight for passed, weight in rules if passed) / total, 3)
+
+
+def _status_for_levels(
+    close: float, confirmation: float, invalidation: float, bullish: bool
+) -> str:
+    if bullish:
+        if close <= invalidation:
+            return "invalidated"
+        if close >= confirmation:
+            return "confirmed"
+    else:
+        if close >= invalidation:
+            return "invalidated"
+        if close <= confirmation:
+            return "confirmed"
+    return "developing"
+
+
+def _pattern(
+    name: str,
+    confidence: float,
+    status: str,
+    evidence: list[str],
+    contradictions: list[str],
+    confirmation: float,
+    invalidation: float,
+) -> PatternResult:
+    return PatternResult(
+        name,
+        confidence,
+        status,
+        evidence,
+        contradictions,
+        confirmation,
+        invalidation,
+    )
+
+
+def _score_double(
+    pivots: list[dict[str, Any]], close: float, tolerance: float, bottom: bool
+) -> PatternResult | None:
+    kinds = ("low", "high", "low") if bottom else ("high", "low", "high")
+    sequence = _latest_sequence(pivots, kinds)
+    if sequence is None:
+        return None
+    first, neckline, second = sequence
+    similar = abs(first["value"] - second["value"]) <= tolerance * 2
+    separation = abs(neckline["value"] - first["value"]) >= tolerance * 2
+    confidence = _confidence([(similar, 2), (separation, 2), (True, 1)])
+    evidence = ["ordered alternating pivots", "intervening neckline pivot"]
+    contradictions = []
+    if not similar:
+        contradictions.append("outer extrema are imperfectly matched")
+    if not separation:
+        contradictions.append("neckline separation is weak")
+    if bottom:
+        confirmation = neckline["value"] + tolerance
+        invalidation = min(first["value"], second["value"]) - tolerance
+        name = "double-bottom"
+    else:
+        confirmation = neckline["value"] - tolerance
+        invalidation = max(first["value"], second["value"]) + tolerance
+        name = "double-top"
+    status = _status_for_levels(close, confirmation, invalidation, bottom)
+    return _pattern(
+        name, confidence, status, evidence, contradictions, confirmation, invalidation
+    )
+
+
+def _score_shoulders(
+    pivots: list[dict[str, Any]], close: float, tolerance: float, inverse: bool
+) -> PatternResult | None:
+    kinds = ("low", "high", "low", "high", "low") if inverse else (
+        "high",
+        "low",
+        "high",
+        "low",
+        "high",
+    )
+    sequence = _latest_sequence(pivots, kinds)
+    if sequence is None:
+        return None
+    left, neck1, head, neck2, right = sequence
+    shoulders = abs(left["value"] - right["value"]) <= tolerance * 2
+    head_extreme = (
+        head["value"] < min(left["value"], right["value"]) - tolerance
+        if inverse
+        else head["value"] > max(left["value"], right["value"]) + tolerance
+    )
+    symmetry = abs((head["index"] - left["index"]) - (right["index"] - head["index"]))
+    symmetric = symmetry <= max(2, (right["index"] - left["index"]) * 0.4)
+    confidence = _confidence([(shoulders, 2), (head_extreme, 2), (symmetric, 1)])
+    contradictions = []
+    if not shoulders:
+        contradictions.append("shoulders are imperfectly matched")
+    if not symmetric:
+        contradictions.append("pattern timing is asymmetric")
+    neckline = (neck1["value"] + neck2["value"]) / 2
+    if inverse:
+        confirmation = neckline + tolerance
+        invalidation = head["value"] - tolerance
+        name = "inverse-head-and-shoulders"
+    else:
+        confirmation = neckline - tolerance
+        invalidation = head["value"] + tolerance
+        name = "head-and-shoulders"
+    status = _status_for_levels(close, confirmation, invalidation, inverse)
+    return _pattern(
+        name,
+        confidence,
+        status,
+        ["five ordered alternating pivots", "distinct head and shoulders"],
+        contradictions,
+        confirmation,
+        invalidation,
+    )
+
+
+def _reversal_patterns(
+    pivots: list[dict[str, Any]], close: float, tolerance: float
+) -> list[PatternResult]:
+    scorers = [
+        _score_double(pivots, close, tolerance, True),
+        _score_double(pivots, close, tolerance, False),
+        _score_shoulders(pivots, close, tolerance, False),
+        _score_shoulders(pivots, close, tolerance, True),
+    ]
+    return [result for result in scorers if result is not None]
+
+
+def _serialize_pattern(pattern: PatternResult) -> dict[str, Any]:
+    return {
+        "name": pattern.name,
+        "confidence": pattern.confidence,
+        "status": pattern.status,
+        "evidence": pattern.evidence,
+        "contradictions": pattern.contradictions,
+        "confirmation_level": pattern.confirmation_level,
+        "invalidation_level": pattern.invalidation_level,
+    }
+
+
 def analyze_frame(
     frame: pl.LazyFrame, metadata: dict[str, Any], historical: bool = False
 ) -> dict[str, Any]:
     collected = _collect_usable(detect_swings(add_features(frame)))
     pivots = _ordered_pivots(collected)
+    tolerance = float(collected["tolerance"].drop_nulls()[-1])
+    close = float(collected["close"][-1])
+    patterns = _reversal_patterns(pivots, close, tolerance)
     return {
         "data": {
             **metadata,
@@ -267,5 +436,8 @@ def analyze_frame(
             "end": collected["trade_timestamp"][-1],
         },
         "structure": classify_structure(collected, pivots),
-        "patterns": [],
+        "patterns": [
+            _serialize_pattern(pattern)
+            for pattern in sorted(patterns, key=lambda item: (-item.confidence, item.name))
+        ],
     }
