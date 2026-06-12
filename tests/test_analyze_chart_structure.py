@@ -122,3 +122,22 @@ def test_add_features_calculates_finite_atr_and_tolerance() -> None:
     result = structure.add_features(price_frame(list(range(100, 150)))).collect()
     assert result["atr_14"].drop_nulls().is_finite().all()
     assert result["tolerance"].drop_nulls().min() > 0
+
+
+@pytest.mark.parametrize(
+    ("closes", "trend", "sequence"),
+    [
+        (ascending_channel_path(), "bullish", "higher-highs-higher-lows"),
+        (descending_channel_path(), "bearish", "lower-highs-lower-lows"),
+    ],
+)
+def test_classify_structure_identifies_direction(closes, trend, sequence) -> None:
+    result = structure.analyze_frame(price_frame(closes), metadata())
+    assert result["structure"]["trend"] == trend
+    assert result["structure"]["swing_sequence"] == sequence
+
+
+def test_classify_structure_identifies_horizontal_range() -> None:
+    closes = [100, 103, 101, 104, 100, 103] * 10
+    result = structure.analyze_frame(price_frame(closes), metadata())
+    assert result["structure"]["formation"] == "horizontal-range"
