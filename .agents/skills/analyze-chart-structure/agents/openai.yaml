@@ -1,0 +1,4 @@
+interface:
+  display_name: "Analyze Chart Structure"
+  short_description: "Classify structural stock chart patterns"
+  default_prompt: "Use $analyze-chart-structure to classify the current structure and named patterns for SUNFLAG.NS on the hourly timeframe."

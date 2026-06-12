@@ -58,3 +58,18 @@ def test_similarity_skill_documents_required_contract() -> None:
         "find_similar_setups.py",
     ]:
         assert required in text
+
+
+def test_chart_structure_skill_documents_required_contract() -> None:
+    text = Path(".agents/skills/analyze-chart-structure/SKILL.md").read_text()
+    for required in [
+        "talk-to-stock-data",
+        "generic structure",
+        "developing",
+        "confirmed",
+        "invalidated",
+        "explicitly requests",
+        "analyze_structure.py",
+        "confidence is not probability",
+    ]:
+        assert required in text
