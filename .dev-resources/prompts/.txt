@@ -297,7 +297,7 @@ without requiring changes to the historical data storage format.
 
 $talk
 Find out the best stocks that are preparing for an upside movement.
-The logic is every stock moves up and then dips down some certain percentage. For each stock find out this regular dip percentage.
+The logic is every stock moves up and then dips down some certain percentage (pullback). For each stock find out this regular dip percentage.
 find which stock is currentlly sitting at this dip percentage and ready to move up seeing its past data.
 along with stop loss and target.
 
