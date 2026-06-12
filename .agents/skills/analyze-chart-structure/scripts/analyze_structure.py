@@ -495,6 +495,32 @@ def _serialize_pattern(pattern: PatternResult) -> dict[str, Any]:
     }
 
 
+def scan_historical_occurrences(
+    frame: pl.DataFrame, patterns: list[PatternResult]
+) -> dict[str, Any]:
+    current = max(patterns, key=lambda pattern: pattern.confidence) if patterns else None
+    window = frame.height
+    current_start = 0
+    current_end = window - 1
+    occurrences: list[dict[str, Any]] = []
+    summary = {
+        f"median_return_{horizon}": None for horizon in HISTORICAL_HORIZONS
+    }
+    return {
+        "pattern": current.name if current is not None else None,
+        "status_family": current.status if current is not None else None,
+        "window_periods": window,
+        "current_window_start_index": current_start,
+        "current_window_end_index": current_end,
+        "minimum_confidence": current.confidence if current is not None else None,
+        "horizons": list(HISTORICAL_HORIZONS),
+        "occurrence_count": len(occurrences),
+        "summary": summary,
+        "occurrences": occurrences,
+        "warning": "Fewer than five non-overlapping historical occurrences survived.",
+    }
+
+
 def analyze_frame(
     frame: pl.LazyFrame, metadata: dict[str, Any], historical: bool = False
 ) -> dict[str, Any]:
@@ -507,7 +533,7 @@ def analyze_frame(
     highs = [pivot for pivot in pivots if pivot["kind"] == "high"][-4:]
     lows = [pivot for pivot in pivots if pivot["kind"] == "low"][-4:]
     patterns.extend(_boundary_patterns(structure, highs, lows, close, tolerance))
-    return {
+    result = {
         "data": {
             **metadata,
             "period_count": collected.height,
@@ -520,3 +546,6 @@ def analyze_frame(
             for pattern in sorted(patterns, key=lambda item: (-item.confidence, item.name))
         ],
     }
+    if historical:
+        result["historical"] = scan_historical_occurrences(collected, patterns)
+    return result

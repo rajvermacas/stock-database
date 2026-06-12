@@ -197,3 +197,21 @@ def test_close_beyond_boundary_reports_breakout() -> None:
         price_frame(ascending_triangle_path() + [120, 123]), metadata()
     )
     assert result["structure"]["breakout_state"] == "breakout"
+
+
+def test_default_analysis_omits_historical_outcomes() -> None:
+    result = structure.analyze_frame(price_frame(double_bottom_path()), metadata())
+    assert "historical" not in result
+
+
+def test_historical_analysis_returns_non_overlapping_occurrences() -> None:
+    repeated = double_bottom_path() + [120] * 25 + double_bottom_path() + [125] * 25
+    result = structure.analyze_frame(price_frame(repeated), metadata(), historical=True)
+    historical = result["historical"]
+    assert historical["horizons"] == [5, 10, 20]
+    assert all(
+        left["window_end_index"] < right["window_start_index"]
+        for left, right in zip(
+            historical["occurrences"], historical["occurrences"][1:], strict=False
+        )
+    )
