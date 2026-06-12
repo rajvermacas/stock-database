@@ -80,6 +80,24 @@ precalculated.
 - Avoid Python row iteration, per-symbol file reads, repeated collection, and eager joins.
 - Use Polars window, group, rolling, and dynamic-group expressions for all calculations.
 
+## Missing Stock Acquisition
+
+When an explicitly requested stock lacks required local price data:
+
+- read repository-root `COMMANDS.md`;
+- choose a Yahoo-supported exact or compatible source interval;
+- update `config/stock-data.toml` with that interval and sufficient
+  `download.initial_start_date` history;
+- leave the updated configuration in place;
+- run the documented `update-symbol` command from the repository root;
+- require a successful exit code and verify requested coverage with lazy Polars before
+  analysis.
+
+Do not acquire all symbols to fill gaps in a ranking or screen. Disclose and exclude
+missing members according to the user's requested universe semantics. Do not treat a
+successful command as proof of sufficient coverage; verify the required dates, lookback,
+and exact-interval indicators.
+
 ## OHLCV Resampling
 
 Within each symbol and output period:
@@ -116,6 +134,7 @@ Raise a clear exception when:
 - `market-data/prices` is absent;
 - exact-interval precalculated indicators are requested but unavailable;
 - no stored interval can derive the requested timeframe;
-- a requested symbol or date range has no data;
+- acquisition for an explicitly requested missing stock fails;
+- acquired data still does not cover the requested symbol, date range, or lookback;
 - required lookback observations are unavailable;
 - the requested calculation is materially ambiguous.

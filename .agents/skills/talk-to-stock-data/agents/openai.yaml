@@ -1,4 +1,4 @@
 interface:
   display_name: "Talk to Stock Data"
-  short_description: "Query local prices and technical indicators"
-  default_prompt: "Use $talk-to-stock-data to analyze local stock prices and precalculated indicators at a stored or derived timeframe."
+  short_description: "Query and acquire local stock market data"
+  default_prompt: "Use $talk-to-stock-data to acquire missing requested stock data when needed, then analyze local prices and indicators."
