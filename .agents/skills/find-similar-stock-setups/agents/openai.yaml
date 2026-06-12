@@ -1,4 +1,0 @@
-interface:
-  display_name: "Find Similar Stock Setups"
-  short_description: "Find same-stock historical chart analogs"
-  default_prompt: "Use $find-similar-stock-setups to find historical setups similar to the latest setup for CHENNPETRO.NS."
