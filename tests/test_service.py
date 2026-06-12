@@ -10,45 +10,65 @@ from stock_data.yahoo import DownloadBatch
 
 
 class FakeStore:
-    def __init__(self, changed=True, failed_symbol=None) -> None:
+    def __init__(self, changed=True, failed_symbol=None, events=None) -> None:
         self.changed = changed
         self.failed_symbol = failed_symbol
+        self.events = events
         self.replaced_symbols = []
 
     def replace(self, symbol, frame):
         if symbol == self.failed_symbol:
             raise ValueError("invalid parquet")
+        if self.events is not None:
+            self.events.append(f"write:{symbol}")
         self.replaced_symbols.append(symbol)
         return WriteResult(self.changed, frame.height, frame.height)
 
 
 class FakeYahoo:
-    def __init__(self, errors=None) -> None:
+    def __init__(self, errors=None, batch_size=None, events=None) -> None:
         self.requests = []
         self.errors = errors or {}
+        self.batch_size = batch_size
+        self.events = events
 
-    def download(self, symbols, start, end):
-        self.requests.append((symbols, start, end))
-        frame = pd.DataFrame(
-            {
-                "Open": [1.0],
-                "High": [2.0],
-                "Low": [0.5],
-                "Close": [1.5],
-                "Volume": [10],
-            },
-            index=pd.DatetimeIndex([f"{end} 09:15"], name="Datetime"),
-        )
-        frames = {symbol: frame for symbol in symbols if symbol not in self.errors}
-        return DownloadBatch(frames, self.errors)
+    def download_batches(self, symbols, start, end):
+        size = self.batch_size or len(symbols)
+        for index in range(0, len(symbols), size):
+            chunk = symbols[index : index + size]
+            self.requests.append((chunk, start, end))
+            if self.events is not None:
+                self.events.append(f"download:{','.join(chunk)}")
+            frame = pd.DataFrame(
+                {
+                    "Open": [1.0],
+                    "High": [2.0],
+                    "Low": [0.5],
+                    "Close": [1.5],
+                    "Volume": [10],
+                },
+                index=pd.DatetimeIndex([f"{end} 09:15"], name="Datetime"),
+            )
+            frames = {
+                symbol: frame for symbol in chunk if symbol not in self.errors
+            }
+            errors = {
+                symbol: self.errors[symbol]
+                for symbol in chunk
+                if symbol in self.errors
+            }
+            yield DownloadBatch(tuple(chunk), frames, errors)
 
 
 class FakeIndicators:
-    def __init__(self, failed_symbol=None) -> None:
+    def __init__(self, failed_symbol=None, events=None) -> None:
         self.failed_symbol = failed_symbol
+        self.events = events
         self.requests = []
 
     def refresh(self, symbol, prices_changed):
+        if self.events is not None:
+            self.events.append(f"indicator:{symbol}")
         self.requests.append((symbol, prices_changed))
         if symbol == self.failed_symbol:
             raise ValueError("indicator failed")
@@ -61,11 +81,13 @@ def build_service(
     errors=None,
     failed_symbol=None,
     indicator_failed_symbol=None,
+    batch_size=None,
+    events=None,
 ):
     service = UpdateService(
-        FakeStore(changed, failed_symbol),
-        FakeYahoo(errors),
-        FakeIndicators(indicator_failed_symbol),
+        FakeStore(changed, failed_symbol, events),
+        FakeYahoo(errors, batch_size, events),
+        FakeIndicators(indicator_failed_symbol, events),
         get_interval(interval),
         date(2000, 1, 1),
     )
@@ -132,9 +154,43 @@ def test_normalization_failure_does_not_replace_prices(mocker) -> None:
     )
     mocker.patch.object(
         service.yahoo,
-        "download",
-        return_value=DownloadBatch({"TCS.NS": malformed}, {}),
+        "download_batches",
+        return_value=iter([DownloadBatch(("TCS.NS",), {"TCS.NS": malformed}, {})]),
     )
     summary = service.update(["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
     assert summary.count(SymbolStatus.FAILED) == 1
     assert service.store.replaced_symbols == []
+
+
+def test_batch_is_fully_processed_before_next_download() -> None:
+    events = []
+    service = build_service(batch_size=1, events=events)
+
+    service.update(
+        ["TCS.NS", "INFY.NS"],
+        datetime(2026, 6, 8, 16, 30, tzinfo=IST),
+    )
+
+    assert events == [
+        "download:TCS.NS",
+        "write:TCS.NS",
+        "indicator:TCS.NS",
+        "download:INFY.NS",
+        "write:INFY.NS",
+        "indicator:INFY.NS",
+    ]
+
+
+def test_results_preserve_input_order_across_batches() -> None:
+    service = build_service(batch_size=1, errors={"BAD.NS": "missing"})
+
+    summary = service.update(
+        ["INFY.NS", "BAD.NS", "TCS.NS"],
+        datetime(2026, 6, 8, 16, 30, tzinfo=IST),
+    )
+
+    assert [result.symbol for result in summary.results] == [
+        "INFY.NS",
+        "BAD.NS",
+        "TCS.NS",
+    ]

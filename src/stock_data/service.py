@@ -63,8 +63,15 @@ class UpdateService:
     ) -> UpdateSummary:
         if now.tzinfo is None:
             raise ValueError("now must be timezone-aware")
-        results = self._process_group(symbols, self.initial_start, now.date(), now)
-        results = self._refresh_indicators(results)
+        results = []
+        for batch in self.yahoo.download_batches(
+            symbols, self.initial_start, now.date()
+        ):
+            batch_results = [
+                self._process_symbol(symbol, batch.frames, batch.errors, now)
+                for symbol in batch.symbols
+            ]
+            results.extend(self._refresh_indicators(batch_results))
         ordered = sorted(results, key=lambda result: symbols.index(result.symbol))
         return UpdateSummary(tuple(ordered))
 
@@ -101,15 +108,6 @@ class UpdateService:
                 result.stored_rows,
                 str(exc),
             )
-
-    def _process_group(
-        self, symbols: list[str], start: date, end: date, now: datetime
-    ) -> list[SymbolResult]:
-        batch = self.yahoo.download(symbols, start, end)
-        return [
-            self._process_symbol(symbol, batch.frames, batch.errors, now)
-            for symbol in symbols
-        ]
 
     def _process_symbol(
         self, symbol: str, frames: dict, errors: dict, now: datetime
