@@ -6,13 +6,21 @@ from stock_data.config import YahooConfig
 from stock_data.yahoo import YahooClient
 
 
+def download_one(client: YahooClient, symbols: list[str], start: date, end: date):
+    batches = list(client.download_batches(symbols, start, end))
+    assert len(batches) == 1
+    return batches[0]
+
+
 def test_download_converts_end_and_uses_adjusted_prices(mocker) -> None:
     frame = pd.DataFrame({"Close": [1.0]})
     download = mocker.patch("stock_data.yahoo.yf.download", return_value=frame)
     client = YahooClient(
         YahooConfig(interval="1d", batch_size=2, timeout_seconds=30, threads=True)
     )
-    result = client.download(["TCS.NS"], date(2026, 6, 1), date(2026, 6, 5))
+    result = download_one(
+        client, ["TCS.NS"], date(2026, 6, 1), date(2026, 6, 5)
+    )
     assert "TCS.NS" in result.frames
     assert download.call_args.kwargs["end"] == "2026-06-06"
     assert download.call_args.kwargs["auto_adjust"] is True
@@ -29,7 +37,9 @@ def test_missing_batch_symbol_is_retried_once(mocker) -> None:
     client = YahooClient(
         YahooConfig(interval="1d", batch_size=5, timeout_seconds=30, threads=False)
     )
-    result = client.download(["TCS.NS", "INFY.NS"], date(2026, 6, 1), date(2026, 6, 5))
+    result = download_one(
+        client, ["TCS.NS", "INFY.NS"], date(2026, 6, 1), date(2026, 6, 5)
+    )
     assert set(result.frames) == {"TCS.NS", "INFY.NS"}
     assert download.call_count == 2
 
@@ -44,7 +54,9 @@ def test_all_null_batch_symbol_is_retried_once(mocker) -> None:
     client = YahooClient(
         YahooConfig(interval="1d", batch_size=5, timeout_seconds=30, threads=False)
     )
-    result = client.download(["TCS.NS", "INFY.NS"], date(2026, 6, 1), date(2026, 6, 5))
+    result = download_one(
+        client, ["TCS.NS", "INFY.NS"], date(2026, 6, 1), date(2026, 6, 5)
+    )
     assert set(result.frames) == {"TCS.NS", "INFY.NS"}
     assert download.call_count == 2
 
@@ -58,7 +70,9 @@ def test_all_null_single_symbol_batch_is_retried_once(mocker) -> None:
     client = YahooClient(
         YahooConfig(interval="1d", batch_size=5, timeout_seconds=30, threads=False)
     )
-    result = client.download(["TCS.NS"], date(2026, 6, 1), date(2026, 6, 5))
+    result = download_one(
+        client, ["TCS.NS"], date(2026, 6, 1), date(2026, 6, 5)
+    )
     assert "TCS.NS" in result.frames
     assert download.call_count == 2
 
@@ -70,7 +84,31 @@ def test_download_splits_symbols_into_configured_chunks(mocker) -> None:
     client = YahooClient(
         YahooConfig(interval="1d", batch_size=1, timeout_seconds=30, threads=False)
     )
-    client.download(["TCS.NS", "INFY.NS"], date(2026, 6, 1), date(2026, 6, 5))
+    batches = list(
+        client.download_batches(
+            ["TCS.NS", "INFY.NS"], date(2026, 6, 1), date(2026, 6, 5)
+        )
+    )
+    assert len(batches) == 2
+    assert download.call_count == 2
+
+
+def test_download_batches_requests_next_chunk_only_when_consumed(mocker) -> None:
+    download = mocker.patch(
+        "stock_data.yahoo.yf.download",
+        return_value=pd.DataFrame({"Close": [1.0]}),
+    )
+    client = YahooClient(
+        YahooConfig(interval="1d", batch_size=1, timeout_seconds=30, threads=False)
+    )
+
+    batches = client.download_batches(
+        ["TCS.NS", "INFY.NS"], date(2026, 6, 1), date(2026, 6, 5)
+    )
+    next(batches)
+    assert download.call_count == 1
+
+    next(batches)
     assert download.call_count == 2
 
 
@@ -81,6 +119,8 @@ def test_batch_error_contains_interval_and_range(mocker) -> None:
     client = YahooClient(
         YahooConfig(interval="1h", batch_size=2, timeout_seconds=30, threads=False)
     )
-    result = client.download(["TCS.NS"], date(2025, 1, 1), date(2026, 6, 1))
+    result = download_one(
+        client, ["TCS.NS"], date(2025, 1, 1), date(2026, 6, 1)
+    )
     assert "interval=1h" in result.errors["TCS.NS"]
     assert "start=2025-01-01 end=2026-06-01" in result.errors["TCS.NS"]

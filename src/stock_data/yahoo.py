@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
@@ -26,6 +27,7 @@ class YahooDownloadError(RuntimeError):
 
 @dataclass(frozen=True)
 class DownloadBatch:
+    symbols: tuple[str, ...]
     frames: dict[str, pd.DataFrame]
     errors: dict[str, str]
 
@@ -34,21 +36,20 @@ class YahooClient:
     def __init__(self, config: YahooConfig) -> None:
         self.config = config
 
-    def download(self, symbols: list[str], start: date, end: date) -> DownloadBatch:
-        frames: dict[str, pd.DataFrame] = {}
-        errors: dict[str, str] = {}
+    def download_batches(
+        self, symbols: list[str], start: date, end: date
+    ) -> Iterator[DownloadBatch]:
         for chunk in _chunks(symbols, self.config.batch_size):
-            self._download_chunk(chunk, start, end, frames, errors)
-        return DownloadBatch(frames, errors)
+            yield self._download_chunk(chunk, start, end)
 
     def _download_chunk(
         self,
         symbols: list[str],
         start: date,
         end: date,
-        frames: dict[str, pd.DataFrame],
-        errors: dict[str, str],
-    ) -> None:
+    ) -> DownloadBatch:
+        frames: dict[str, pd.DataFrame] = {}
+        errors: dict[str, str] = {}
         LOGGER.info(
             "Downloading batch symbols=%d interval=%s start=%s end=%s",
             len(symbols),
@@ -62,10 +63,11 @@ class YahooClient:
             LOGGER.exception("Yahoo batch failed symbols=%s", symbols)
             error = YahooDownloadError(symbols, self.config.interval, start, end, exc)
             errors.update({symbol: str(error) for symbol in symbols})
-            return
+            return DownloadBatch(tuple(symbols), frames, errors)
         frames.update(split_batch_frame(batch, symbols))
         for symbol in set(symbols).difference(frames):
             self._retry_symbol(symbol, start, end, frames, errors)
+        return DownloadBatch(tuple(symbols), frames, errors)
 
     def _retry_symbol(
         self,
