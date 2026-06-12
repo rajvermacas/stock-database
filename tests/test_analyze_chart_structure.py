@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -215,3 +216,38 @@ def test_historical_analysis_returns_non_overlapping_occurrences() -> None:
             historical["occurrences"], historical["occurrences"][1:], strict=False
         )
     )
+
+
+def test_cli_emits_json_without_historical_by_default(tmp_path, capsys) -> None:
+    prices_root = write_price_fixture(tmp_path, double_bottom_path())
+    structure.main(
+        [
+            "--symbol",
+            "TEST.NS",
+            "--interval",
+            "1h",
+            "--prices-root",
+            str(prices_root),
+            "--periods",
+            "60",
+        ]
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["data"]["symbol"] == "TEST.NS"
+    assert "historical" not in result
+
+
+def test_real_sunflag_hourly_window_reports_bearish_developing_structure() -> None:
+    result = structure.analyze_request(
+        structure.AnalysisRequest(
+            symbol="SUNFLAG.NS",
+            interval="1h",
+            prices_root=Path("market-data/prices"),
+            start=datetime(2026, 6, 5, tzinfo=IST),
+            end=None,
+            periods=None,
+            historical=False,
+        )
+    )
+    assert result["structure"]["trend"] == "bearish"
+    assert all(pattern["status"] != "confirmed" for pattern in result["patterns"])

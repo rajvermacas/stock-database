@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
+import json
+import logging
+import math
 import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import polars as pl
 
@@ -16,6 +21,8 @@ ATR_PERIOD = 14
 SWING_RADIUS = 2
 HISTORICAL_HORIZONS = (5, 10, 20)
 INTERVAL_PATTERN = re.compile(r"^[1-9][0-9]*(m|h|d|wk|mo)$")
+LOGGER = logging.getLogger("analyze_chart_structure")
+IST = ZoneInfo("Asia/Kolkata")
 
 
 class StructureError(ValueError):
@@ -251,6 +258,11 @@ def classify_structure(frame: pl.DataFrame, pivots: list[dict[str, Any]]) -> dic
     high_slope = _slope(highs[-4:])
     low_slope = _slope(lows[-4:])
     trend, sequence = _trend_and_sequence(highs, lows, tolerance)
+    if trend == "sideways" and high_slope is not None and low_slope is not None:
+        if high_slope < -0.05 and low_slope < -0.05:
+            trend, sequence = "bearish", "lower-highs-lower-lows"
+        elif high_slope > 0.05 and low_slope > 0.05:
+            trend, sequence = "bullish", "higher-highs-higher-lows"
     support = float(lows[-1]["value"]) if lows else None
     resistance = float(highs[-1]["value"]) if highs else None
     return {
@@ -549,3 +561,84 @@ def analyze_frame(
     if historical:
         result["historical"] = scan_historical_occurrences(collected, patterns)
     return result
+
+
+def analyze_request(request: AnalysisRequest) -> dict[str, Any]:
+    LOGGER.info(
+        "Loading symbol=%s interval=%s start=%s end=%s periods=%s historical=%s",
+        request.symbol,
+        request.interval,
+        request.start,
+        request.end,
+        request.periods,
+        request.historical,
+    )
+    frame, metadata = load_analysis_frame(request)
+    result = analyze_frame(frame, metadata, request.historical)
+    LOGGER.info(
+        "Analyzed symbol=%s periods=%d patterns=%d trend=%s",
+        request.symbol,
+        result["data"]["period_count"],
+        len(result["patterns"]),
+        result["structure"]["trend"],
+    )
+    return result
+
+
+def _date(value: str) -> datetime:
+    try:
+        result = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"Invalid ISO datetime: {value}") from exc
+    if result.tzinfo is None:
+        raise argparse.ArgumentTypeError("Datetime must include a timezone offset")
+    return result.astimezone(IST)
+
+
+def _arguments(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--symbol", required=True)
+    parser.add_argument("--interval", required=True)
+    parser.add_argument("--prices-root", required=True, type=Path)
+    parser.add_argument("--periods", type=int)
+    parser.add_argument("--start", type=_date)
+    parser.add_argument("--end", type=_date)
+    parser.add_argument("--historical", action="store_true")
+    return parser.parse_args(argv)
+
+
+def _serialize(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise StructureError("Result contains non-finite values")
+        return value
+    if isinstance(value, dict):
+        return {key: _serialize(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_serialize(item) for item in value]
+    return value
+
+
+def main(argv: list[str] | None = None) -> None:
+    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+    args = _arguments(argv)
+    try:
+        request = validate_request(
+            args.symbol,
+            args.interval,
+            args.start,
+            args.end,
+            args.periods,
+            args.prices_root,
+            args.historical,
+        )
+        print(json.dumps(_serialize(analyze_request(request))))
+    except StructureError as exc:
+        LOGGER.error("%s", exc)
+        raise SystemExit(2) from exc
+
+
+if __name__ == "__main__":
+    main()
