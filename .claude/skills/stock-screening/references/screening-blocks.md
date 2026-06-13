@@ -109,6 +109,9 @@ not a bug. The requirement is that `k` is computed from the stock, not a literal
 Healthy pullbacks dry up on volume into the dip. Compare average volume on the dip
 (confirmed high → live low) vs the prior up-leg (prior confirmed low → confirmed high).
 Ratio < 1 = fading = healthy. This annotates conviction; it never rejects a candidate.
+If either leg is empty or has zero/None volume (thin or halted bars) it returns `None`,
+shown as "n/a" in the report — never an error, never a rejection. (A single illiquid name
+must not abort a universe screen.)
 
 ```python
 def volume_fade(df, leg_start_ts, high_ts, live_low_ts):
@@ -121,8 +124,8 @@ def volume_fade(df, leg_start_ts, high_ts, live_low_ts):
         return {"vol_fade_ratio": None, "fading": None}   # too thin to judge; disclose
     up_v = upleg["volume"].mean()
     dip_v = dip["volume"].mean()
-    if up_v is None or up_v == 0:
-        raise ValueError("up-leg has no volume — cannot compute volume-fade")
+    if not up_v or dip_v is None:
+        return {"vol_fade_ratio": None, "fading": None}   # zero/None volume (thin/halted bars)
     ratio = dip_v / up_v
     return {"vol_fade_ratio": ratio, "fading": ratio < 1.0}
 ```
@@ -157,7 +160,9 @@ repo, paste them into the same heredoc — with these screening additions:
 6. `sig = signature(events)` (Block 7); `state = current_state(df, zz, sig)` (Block 8,
    runs `live_pullback_low` internally).
 7. `vf = volume_fade(df, leg_start_ts, high_ts, live_low_ts)` (Block A4) on the live dip
-   — annotation only.
+   — annotation only. For the live (unconfirmed) dip, `leg_start_ts` = the last confirmed
+   low before the last confirmed high; `high_ts` = the last confirmed high; `live_low_ts`
+   = the live low's timestamp from `live_pullback_low`.
 8. Compute each stop's % from the latest close: `(close - level) / close * 100` for
    `near_term_invalidation` and `structural_floor`.
 
