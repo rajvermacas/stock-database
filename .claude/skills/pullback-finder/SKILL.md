@@ -54,6 +54,12 @@ wrong — every stock's nature differs.
 
 ## Hard rules
 
+- **Never write a file into the repository.** Do not create `.py` scratch files,
+  notebooks, or output files anywhere under the project. Run composed Polars by
+  piping a heredoc to `.venv/bin/python` (`.venv/bin/python - <<'PY' ... PY`) or
+  `-c`. If a throwaway script is genuinely unavoidable, put it under `/tmp/` only.
+  Analysis is read-only against `market-data/`; the only artifact is your reported
+  answer.
 - Timeframe missing/unsupported → ask or raise; never proceed on a guess.
 - Missing symbol / no rows / stale data → quote the error, stop. No partial analysis,
   no fabricated numbers.
