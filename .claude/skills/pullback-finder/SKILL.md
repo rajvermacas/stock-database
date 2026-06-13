@@ -18,9 +18,12 @@ wrong — every stock's nature differs.
 ## Required input
 
 - **Timeframe is mandatory and user-supplied.** Never assume or default it. If the
-  user did not give one, ask before doing anything. Stored: `1d`, `1h`. Other frames
-  (e.g. `1wk`) are derived from `1d` on the fly and disclosed; warn when the derived
-  series is too short (381 daily → ~80 weekly bars).
+  user did not give one, ask before doing anything. ANY Yahoo interval is allowed
+  (`1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo`), so the trader can zoom in. Only
+  `1d` and `1h` are on disk; for anything else, if the data is missing **fetch it**
+  via the project pipeline (`references/data.md` → "Fetching a missing timeframe",
+  which uses COMMANDS.md). Fine intraday intervals have short Yahoo history → few
+  events → expect the low-confidence rule to fire; disclose it.
 - Symbol is optional: none → universe screener; symbol given → single-stock report.
 
 ## How to use the grammar
@@ -33,6 +36,10 @@ wrong — every stock's nature differs.
 
 ## Workflow — single symbol
 
+0. **Resolve the data** for the requested interval: if
+   `market-data/prices/<interval>/<SYMBOL>.parquet` is missing, fetch it first
+   (`references/data.md` → "Fetching a missing timeframe"); respect the Yahoo
+   history caps and fail fast on a failed download.
 1. `load` → `add_indicators` (Block 1). Check `df.height`; if too short to warm the
    EMAs you use, say so.
 2. `fractal_flags` → `zigzag` (Blocks 2–3); pick `k` from the stock's choppiness.
@@ -100,6 +107,11 @@ structural"; invalidation → "where you'd be wrong". If `n_events < 5`, say pla
   Analysis is read-only against `market-data/`; the only artifact is your reported
   answer.
 - Timeframe missing/unsupported → ask or raise; never proceed on a guess.
+- Fetching market data for a missing interval is allowed and expected (it lands in
+  gitignored `market-data/prices/` — that is the data lake, not a forbidden scratch
+  file; the `/tmp` config is the only file you author). A failed fetch
+  (`Failed`/non-zero exit) → quote the Yahoo error and stop; never analyze a partial
+  or empty download.
 - Missing symbol / no rows / stale data → quote the error, stop. No partial analysis,
   no fabricated numbers.
 - `n_events < 5` → label **insufficient-history, low-confidence**; never invent a
