@@ -208,20 +208,64 @@ def current_state(df, zz, sig):
     last_high = next((p for p in reversed(zz) if p[1] == "H"), None)
     if last_high is None:
         return {"label": "no-match", "why": "no confirmed swing high"}
+    live = live_pullback_low(df, zz)               # Block 8b — recover edge-zone low
+    hi_idx = max(i for i, p in enumerate(zz) if p[1] == "H")
+    structural_floor = next((zz[j][2] for j in range(hi_idx - 1, -1, -1)
+                             if zz[j][1] == "L"), None)   # prior confirmed HL = deep floor
+    near_term = live["live_low"] if live["live_low"] is not None else structural_floor
     cur_depth = (last_high[2] - last["close"]) / last_high[2] * 100
     lo, hi = sig["depth_iqr"]
     uptrend = last["close"] > last["ema_50"] and last["ema_50"] > df["ema_50"][-20]
+    out = {"cur_depth": cur_depth, "band": sig["depth_iqr"],
+           "live_low": live["live_low"],
+           "live_low_depth": live.get("depth_from_high_pct"),
+           "near_term_invalidation": near_term,    # QUOTE THIS as the stop, not the floor
+           "structural_floor": structural_floor,   # deeper break = full trend reversal
+           "success_rate": sig["success_rate"], "uptrend": uptrend}
     if uptrend and lo <= cur_depth <= hi:
-        return {"label": "buyable-dip-now", "cur_depth": cur_depth,
-                "band": sig["depth_iqr"], "success_rate": sig["success_rate"]}
-    if uptrend and cur_depth < lo:
-        return {"label": "pullback-coming/wait", "cur_depth": cur_depth,
-                "why": "near high, shallower than typical pullback band"}
-    return {"label": "no-match", "cur_depth": cur_depth, "uptrend": uptrend}
+        out["label"] = "buyable-dip-now"
+    elif uptrend and cur_depth < lo:
+        out["label"] = "pullback-coming/wait"
+        out["why"] = "near high, shallower than typical pullback band"
+    else:
+        out["label"] = "no-match"
+    return out
 ```
 
-The matched past events (their dates) are the audit trail — always list them so the
-trader can eyeball the resemblance.
+`cur_depth` is measured off the latest close. A dip can tag the band and then bounce
+before the last bar — so also check `live_low_depth`: if it landed in the band, a
+swing low may already be in even when `cur_depth` looks shallow. The matched past
+events (their dates) are the audit trail — always list them.
+
+## Block 8b — Live pullback low (the forming, unconfirmed swing)
+
+The confirmed zigzag CANNOT see the most recent swing: `center=True` nulls the last
+`k` bars, so the latest higher-low sits in the unconfirmable edge zone. **Invalidation
+must NOT be read off confirmed pivots alone** — scan raw bars since the last confirmed
+high to recover the live higher-low. This is resolution-independent (reads raw lows),
+so it finds the recent bottom regardless of `k` — no need to re-run at a finer `k`.
+
+```python
+def live_pullback_low(df, zz):
+    last_high = next((p for p in reversed(zz) if p[1] == "H"), None)
+    if last_high is None:
+        raise ValueError("no confirmed swing high")
+    since = df.filter(pl.col("trade_timestamp") > last_high[0])
+    if since.height == 0:
+        return {"live_low": None}            # high is the last bar; nothing formed yet
+    i = since["low"].arg_min()
+    return {
+        "live_low": since["low"][i],
+        "live_low_ts": since["trade_timestamp"][i],
+        "depth_from_high_pct": (last_high[2] - since["low"][i]) / last_high[2] * 100,
+    }
+```
+
+Two invalidation levels result, and the report must give both: the **live higher-low**
+= near-term stop (this pullback failing → a lower-low forming), and the **prior
+confirmed low** = structural floor (full uptrend break). Worked case: STYLAMIND.NS 1h
+— confirmed high ₹3,279, live low ₹3,026 (near-term), prior confirmed low ₹2,772
+(floor). Quoting ₹2,772 as "where you'd be wrong" is the bug; ₹3,026 is the real stop.
 
 ## Block 9 — Universe gate (Stage-1 screener)
 

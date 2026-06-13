@@ -39,8 +39,10 @@ wrong — every stock's nature differs.
 3. `pullback_events` (Block 4): keep HL-holding dips; reversals are logged failures.
 4. For each event: `anchor_for_low` (5) + `outcome` (6).
 5. `signature` (7): the stock's own depth band, dominant anchor, success rate.
-6. `current_state` (8): label today **buyable-dip-now / pullback-coming-wait /
-   no-match**.
+6. `current_state` (8) — it runs `live_pullback_low` (8b) internally. Read the label
+   AND both invalidation levels: `near_term_invalidation` (the live higher-low) is
+   the stop you quote; `structural_floor` is the deeper full-trend-break level. Also
+   check `live_low_depth`: a dip may have tagged the band and bounced already.
 7. Write the report in the plain style below (NOT a stats dump).
 
 ## Workflow — universe screener
@@ -74,8 +76,9 @@ time — so call the reliability <weak / fair / strong> in plain words.
 **What to watch for / what to do:** <the buy zone in ₹, or "it's in the zone now">,
 and one line on conviction (size small if reliability is weak).
 
-**Where you'd be wrong:** a fall below **₹<prior higher-low>** isn't a pullback —
-it's a trend break. Step aside.
+**Where you'd be wrong:** close below **₹<live higher-low>** breaks this pullback
+(near-term stop). The deeper floor is **₹<prior confirmed higher-low>** — below that
+the whole uptrend is broken. Quote the near-term level as the working stop.
 
 ---
 *Details: <n> past dips found · usual depth <X–Y%> · bounce rate <0.NN> · usual
@@ -101,6 +104,12 @@ structural"; invalidation → "where you'd be wrong". If `n_events < 5`, say pla
   no fabricated numbers.
 - `n_events < 5` → label **insufficient-history, low-confidence**; never invent a
   signature from 1–2 events.
+- **Never quote invalidation off confirmed pivots alone.** The latest swing is
+  unconfirmable at the chart edge (`center=True` nulls the last `k` bars), so the
+  forming higher-low is invisible to the confirmed list. Recover it with
+  `live_pullback_low` (Block 8b, raw-bar scan) and report TWO levels: near-term (the
+  live higher-low = the stop) and structural floor (prior confirmed higher-low = full
+  trend break). Quoting the deep floor as the stop is a bug.
 - Pattern thresholds (pivot window, noise filter, depth/retrace bands) are derived
   per stock from its own distribution and disclosed. Risk barriers (3% hard stop,
   ~10–15 bar time stop) are the trader's fixed model — explicit, stated, distinct
