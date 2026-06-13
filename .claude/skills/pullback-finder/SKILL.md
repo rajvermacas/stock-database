@@ -1,0 +1,70 @@
+---
+name: pullback-finder
+description: Find pullbacks in the Parquet stock universe (or for one named symbol) by learning each stock's OWN pullback signature from its history, then labeling its current state. Use when the user asks to screen for pullbacks, "is X pulling back / in a buyable dip", or to study how a stock pulls back. Requires a user-supplied timeframe.
+---
+
+# Pullback Finder
+
+Find pullbacks by reading each stock's own history. A pullback is NOT a fixed rule:
+in a bullish trend a valid pullback is recognized from how THAT stock has pulled back
+before. So first learn the stock's own pullback signature from its data, then check
+whether the current state matches it.
+
+This skill is a **grammar, not an engine**. It ships Polars building blocks and a
+schema reference. YOU write and run bespoke Polars on the fly for each stock,
+composing the blocks like words into sentences. Static, one-size pipelines are
+wrong — every stock's nature differs.
+
+## Required input
+
+- **Timeframe is mandatory and user-supplied.** Never assume or default it. If the
+  user did not give one, ask before doing anything. Stored: `1d`, `1h`. Other frames
+  (e.g. `1wk`) are derived from `1d` on the fly and disclosed; warn when the derived
+  series is too short (381 daily → ~80 weekly bars).
+- Symbol is optional: none → universe screener; symbol given → single-stock report.
+
+## How to use the grammar
+
+1. Read `references/data.md` for schema and the lazy-scan idiom.
+2. Read `references/building-blocks.md` — the blocks. Adapt every parameter (`k`,
+   noise filter, depth bands) to the stock from its own data; never hardcode a
+   global value.
+3. See `references/worked-example.md` for one stock strung end-to-end.
+
+## Workflow — single symbol
+
+1. `load` → `add_indicators` (Block 1). Check `df.height`; if too short to warm the
+   EMAs you use, say so.
+2. `fractal_flags` → `zigzag` (Blocks 2–3); pick `k` from the stock's choppiness.
+3. `pullback_events` (Block 4): keep HL-holding dips; reversals are logged failures.
+4. For each event: `anchor_for_low` (5) + `outcome` (6).
+5. `signature` (7): the stock's own depth band, dominant anchor, success rate.
+6. `current_state` (8): label today **buyable-dip-now / pullback-coming-wait /
+   no-match**, and LIST the matched past events (dates) as the audit trail.
+7. Report: signature + label + matched events + invalidation (the prior higher-low)
+   + caveats (sample size, freshness, derived-timeframe warning).
+
+## Workflow — universe screener
+
+1. `universe_gate` (Block 9): keep symbols in an uptrend; sort by current depth to
+   find dippers. Disclose how many symbols were excluded for short history.
+2. Run the single-symbol workflow (steps 1–6) ONLY on the handful of survivors.
+3. Output a ranked table: symbol, label, current vs typical depth, dominant anchor,
+   success_rate, n_events, invalidation.
+
+## Hard rules
+
+- Timeframe missing/unsupported → ask or raise; never proceed on a guess.
+- Missing symbol / no rows / stale data → quote the error, stop. No partial analysis,
+  no fabricated numbers.
+- `n_events < 5` → label **insufficient-history, low-confidence**; never invent a
+  signature from 1–2 events.
+- Pattern thresholds (pivot window, noise filter, depth/retrace bands) are derived
+  per stock from its own distribution and disclosed. Risk barriers (3% hard stop,
+  ~10–15 bar time stop) are the trader's fixed model — explicit, stated, distinct
+  from pattern bands.
+- Every number is computed in Polars, never eyeballed from a chart or invented.
+- Read-only. Disclose survivorship bias (universe selected today) and on-demand EMA
+  calculation.
+
+This is structural evidence, not financial advice.
