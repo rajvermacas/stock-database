@@ -156,6 +156,9 @@ structural"; invalidation → "where you'd be wrong". If `n_events < 5`, say pla
   file; the `/tmp` config is the only file you author). A failed fetch
   (`Failed`/non-zero exit) → quote the Yahoo error and stop; never analyze a partial
   or empty download.
+- **Never delete or overwrite anything under `market-data/prices/`.** It is the
+  persistent data lake — keep every fetched interval/symbol file, even data you
+  pulled for a single analysis. Only add to it; never clean it up.
 - Missing symbol / no rows / stale data → quote the error, stop. No partial analysis,
   no fabricated numbers.
 - `n_events < 5` → label **insufficient-history, low-confidence**; never invent a
