@@ -140,3 +140,27 @@ def upleg_is_uptrend(df, leg_start_ts, high_ts):
         return False
     return seg["ema_50"][-1] > seg["ema_50"][0]
 ```
+
+## Block A6 — Stage-B recipe: confirm each shortlisted stock
+
+For each symbol from `calibrate_W(...)["shortlist"]`, compose pullback-finder's blocks
+(in `../../pullback-finder/references/building-blocks.md`) — do NOT copy them into the
+repo, paste them into the same heredoc — with these screening additions:
+
+1. `df = add_indicators(load(sym, interval))` (Block 1).
+2. `k = choppiness_k(df.select("high","low","close"))["k"]` (Block A3) — per stock.
+3. `zz = zigzag(fractal_flags(df, k))` (Blocks 2–3); noise filter from the stock's ATR.
+4. `events = pullback_events(zz)` (Block 4), keeping only events whose up-leg passes
+   `upleg_is_uptrend(df, leg_start_ts, high_ts)` (Block A5).
+5. Per event: `anchor_for_low` (5) + `outcome` (6, `stop_pct=0.03`, `horizon=15` — the
+   fixed risk model).
+6. `sig = signature(events)` (Block 7); `state = current_state(df, zz, sig)` (Block 8,
+   runs `live_pullback_low` internally).
+7. `vf = volume_fade(df, leg_start_ts, high_ts, live_low_ts)` (Block A4) on the live dip
+   — annotation only.
+8. Compute each stop's % from the latest close: `(close - level) / close * 100` for
+   `near_term_invalidation` and `structural_floor`.
+
+`n_events < 5` for a symbol → label it low-confidence; never invent a signature.
+This is the SAME math pullback-finder uses for a single symbol — Stage B is that workflow
+run on each survivor, with computed `k`, the up-leg guard, and the volume annotation.
