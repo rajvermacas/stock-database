@@ -70,3 +70,36 @@ def calibrate_W(interval, windows=(60, 120, 240), threshold=0.85):
 
 The result's `mode`/`overlap`/`W_used` MUST be disclosed in the report. `threshold=0.85`
 is itself stated and adjustable. Windows scale to the interval (these suit 1h).
+
+## Block A3 — choppiness → k (per stock, computed; never a hardcoded default)
+
+Uses the battle-tested Choppiness Index (reuses Block 1's ATR inputs). Fibonacci bands
+(38.2 / 50 / 61.8) map the stock's median choppiness to a fractal `k`. Choppier → larger
+k (needs a more dominant pivot); smoother → smaller k.
+
+```python
+import math
+
+def choppiness_k(df, n=14):
+    """Median Choppiness Index over history → fractal k in {4,6,8,10}, clamped [4,12]."""
+    log10n = math.log10(n)
+    d = df.with_columns(pl.max_horizontal(
+            pl.col("high") - pl.col("low"),
+            (pl.col("high") - pl.col("close").shift(1)).abs(),
+            (pl.col("low") - pl.col("close").shift(1)).abs()).alias("tr"))
+    d = d.with_columns([
+        pl.col("tr").rolling_sum(n).alias("atrsum"),
+        pl.col("high").rolling_max(n).alias("hh"),
+        pl.col("low").rolling_min(n).alias("ll")])
+    d = d.with_columns(
+        (100 * (pl.col("atrsum") / (pl.col("hh") - pl.col("ll"))).log10() / log10n).alias("ci"))
+    ci = d["ci"].median()
+    if ci is None:
+        raise ValueError("choppiness undefined — insufficient history for Choppiness Index")
+    k = 4 if ci <= 38.2 else 6 if ci <= 50 else 8 if ci <= 61.8 else 10
+    return {"ci_median": ci, "k": max(4, min(12, k))}
+```
+
+Disclose the computed `k` (and `ci_median`) per stock in the report. The spread is
+data-dependent — a universe of similarly choppy names will share a `k`; that is correct,
+not a bug. The requirement is that `k` is computed from the stock, not a literal.
