@@ -63,7 +63,8 @@ config to `/tmp` (absolute paths, indicators off since the skill computes its ow
 
 - `1h` → `.venv/bin/stock-data --config config/stock-data.toml update-symbol SYMBOL`
 - `1d` → `.venv/bin/stock-data --config config/stock-data-1d.toml update-symbol SYMBOL`
-- any other interval → write `/tmp/pf-<interval>.toml`:
+- any other interval → write `/tmp/pf-<interval>.toml` (keep `[indicators] enabled =
+  false`, see note below):
 
 ```toml
 [paths]
@@ -84,6 +85,16 @@ enabled = false
 ```
 
 then `.venv/bin/stock-data --config /tmp/pf-<interval>.toml update-symbol SYMBOL`.
+
+**Why `indicators = false` (not an oversight).** This skill computes its own EMA/ATR
+in Polars, so precalc indicator files are never read. More importantly, the pipeline's
+indicator step needs a **365-calendar-day warm-up**; an intraday fetch (sub-hour,
+capped at ~60 days) can't meet it, so with indicators enabled the run logs
+`Insufficient indicator history`, writes **no** indicator file, AND exits non-zero
+(`Failed`/`Successful: 0`) even though the price download was fine — which would
+falsely trip the fail-fast above. Keeping indicators off makes the price fetch exit 0
+cleanly. (The repo's own 1h/1d configs enable indicators because they hold enough
+history; only these short on-the-fly fetches must disable it.)
 
 **Yahoo history caps (start date MUST respect these or the download returns nothing):**
 
