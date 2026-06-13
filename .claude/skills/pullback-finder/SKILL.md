@@ -40,17 +40,53 @@ wrong — every stock's nature differs.
 4. For each event: `anchor_for_low` (5) + `outcome` (6).
 5. `signature` (7): the stock's own depth band, dominant anchor, success rate.
 6. `current_state` (8): label today **buyable-dip-now / pullback-coming-wait /
-   no-match**, and LIST the matched past events (dates) as the audit trail.
-7. Report: signature + label + matched events + invalidation (the prior higher-low)
-   + caveats (sample size, freshness, derived-timeframe warning).
+   no-match**.
+7. Write the report in the plain style below (NOT a stats dump).
 
 ## Workflow — universe screener
 
 1. `universe_gate` (Block 9): keep symbols in an uptrend; sort by current depth to
    find dippers. Disclose how many symbols were excluded for short history.
 2. Run the single-symbol workflow (steps 1–6) ONLY on the handful of survivors.
-3. Output a ranked table: symbol, label, current vs typical depth, dominant anchor,
-   success_rate, n_events, invalidation.
+3. Output a short ranked list, one plain line per stock:
+   `SYMBOL — <action>: dipping X% vs its usual Y% dip; bounces ~Z% of the time;
+   buy zone ₹A–B, wrong below ₹C`. Put the raw numbers table in the details footer.
+
+## Output style — talk to a trader, not a statistician
+
+Lead with the answer in plain words. Hide the machinery (no "IQR", "ATR", "MFE",
+"fractal", "k=8", "noise filter" in the main body). Use prices and plain percentages,
+not statistics. The whole report a busy trader reads is the top part; the numbers
+live in a small footer for anyone who wants to check.
+
+Required shape (single symbol):
+
+```
+**<SYMBOL> — <timeframe> → <BUY THE DIP | WAIT | AVOID>. <one-line reason>.**
+
+<1–3 plain sentences: where price is vs its recent high, and whether a dip is
+actually happening right now.>
+
+**How this stock usually dips:** when it pulls back it normally drops about <X–Y%>
+before trying to bounce, and it recovers about <half / two-thirds / N in 10> of the
+time — so call the reliability <weak / fair / strong> in plain words.
+
+**What to watch for / what to do:** <the buy zone in ₹, or "it's in the zone now">,
+and one line on conviction (size small if reliability is weak).
+
+**Where you'd be wrong:** a fall below **₹<prior higher-low>** isn't a pullback —
+it's a trend break. Step aside.
+
+---
+*Details: <n> past dips found · usual depth <X–Y%> · bounce rate <0.NN> · usual
+anchor <ema_NN or "no clean EMA — structural">. Computed on <timeframe> data;
+EMAs derived on the fly. Structural evidence, not financial advice.*
+```
+
+Translate every term: depth band → "usually dips X–Y%"; success_rate → "bounces N%
+of the time"; dominant_anchor 'none' → "dips don't reliably tag an EMA — they're
+structural"; invalidation → "where you'd be wrong". If `n_events < 5`, say plainly
+"too few past pullbacks to trust — low confidence" and stop dressing it up.
 
 ## Hard rules
 
