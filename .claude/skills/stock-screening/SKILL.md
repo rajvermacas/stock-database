@@ -56,13 +56,25 @@ never invent a signature.
 
 ## Stage C — tier + report
 
-Tier confirmed candidates:
+Tier confirmed candidates. **"Dipping now" is required for a BUY** — Stage A's net is
+inclusion-biased and catches names that dipped recently but have since recovered to a new
+high; those are not dip-buys.
 
-- **BUY THE DIP** — recent dip inside its own band, uptrend intact, live low above floor.
-- **SPECULATIVE** — qualifies but `n_events` thin (low-confidence); size small.
+- **BUY THE DIP** — price is *still in the dip now* (`now off high` is positive and inside
+  the stock's own band), uptrend intact, live low above floor, and bounce rate fair or
+  better (≈ 0.5+). Lead the report with the few highest-conviction names (deepest-in-band
+  with the strongest bounce rate and a fading-volume dip), not the whole list.
+- **WATCH / already bounced** — qualified on Stage A but `now off high` ≤ 0 (price has
+  recovered to/above the recent high) or the live low already bounced well off the band.
+  Note them; they are not buys now.
+- **SPECULATIVE** — qualifies but `n_events` thin (low-confidence) **or** bounce rate weak
+  (< ~0.5); size small.
 - **CAUTION** — live low has dropped below the prior higher-low (near-term structure
   cracked, floor % < live-low %).
 - **AVOID** — recent dip far beyond its own band (reversal risk, not a routine dip).
+
+Do not dump every BUY-eligible name — rank by conviction and lead with the top handful;
+state how many more cleared the bar (no silent truncation).
 
 ## Output style
 
