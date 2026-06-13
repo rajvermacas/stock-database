@@ -50,7 +50,10 @@ wrong — every stock's nature differs.
    AND both invalidation levels: `near_term_invalidation` (the live higher-low) is
    the stop you quote; `structural_floor` is the deeper full-trend-break level. Also
    check `live_low_depth`: a dip may have tagged the band and bounced already.
-7. Write the report in the plain style below (NOT a stats dump).
+7. Decide whether to **zoom in** (see "When to zoom in"): if the call turns on the
+   exact swing low / stop or the anchor frame is too thin, drop one frame finer
+   (fetching it if needed) and fold the sharper low/stop into the report.
+8. Write the report in the plain style below (NOT a stats dump).
 
 ## Workflow — universe screener
 
@@ -60,6 +63,44 @@ wrong — every stock's nature differs.
 3. Output a short ranked list, one plain line per stock:
    `SYMBOL — <action>: dipping X% vs its usual Y% dip; bounces ~Z% of the time;
    buy zone ₹A–B, wrong below ₹C`. Put the raw numbers table in the details footer.
+
+## When to zoom in (multi-timeframe intelligence)
+
+The user's timeframe is the **anchor** (the frame they trade). Be intelligent about
+dropping to a **finer** frame to sharpen the call — decide this yourself, fetch the
+finer data if absent (`references/data.md`), and present it as an additive zoom, never
+a silent swap of the anchor.
+
+Timeframe ladder, coarse → fine:
+`1mo · 1wk · 1d · 1h · 30m · 15m · 5m · 1m`. "Zoom in" = move one (occasionally two)
+steps finer.
+
+**Zoom in when the verdict turns on precision the anchor frame can't give:**
+
+- Label is **buyable-dip-now**, or a **live low sits in/near the band** → zoom finer
+  to pin the exact swing low and place a tight structural stop. (A 3% stop usually
+  cannot sit on a higher-frame structure; the finer frame is where the real
+  higher-low lives.)
+- The **forming low is in the anchor frame's edge zone** (unconfirmable, `center=True`
+  nulled it) and the call hinges on whether the higher-low held → a finer frame
+  confirms or denies it directly.
+- `cur_depth` is **right at a band edge** (borderline buyable vs wait) → the finer
+  frame breaks the tie.
+- `n_events < 5` on the anchor frame → a finer frame may hold enough events to escape
+  low-confidence. Use it as supporting evidence, clearly labeled as a different frame
+  with its own (usually shorter) history — not as if it were the anchor's signature.
+
+**Do NOT zoom when** the anchor verdict is a clean no-match, price is mid-structure
+far from any decision, or the finer data would breach a Yahoo history cap and arrive
+too thin to trust. Say why you didn't.
+
+**What the finer frame is for:** locating the swing low, confirming the higher-low
+holds, and timing/stop placement — structure and precision. It is NOT a second
+opinion on the thesis; a finer frame's short history can't carry a full bounce-rate.
+Disclose the zoom, the frame used, and that it was fetched if so.
+
+(Coarser frames are context, not zoom: if the anchor setup contradicts the next frame
+up, name the conflict and let it cap conviction — don't average frames.)
 
 ## Output style — talk to a trader, not a statistician
 
@@ -86,6 +127,9 @@ and one line on conviction (size small if reliability is weak).
 **Where you'd be wrong:** close below **₹<live higher-low>** breaks this pullback
 (near-term stop). The deeper floor is **₹<prior confirmed higher-low>** — below that
 the whole uptrend is broken. Quote the near-term level as the working stop.
+
+<If you zoomed: **Zoom (<finer frame>):** one line on the sharper swing low / stop the
+finer frame revealed, noted as a different, shorter-history frame.>
 
 ---
 *Details: <n> past dips found · usual depth <X–Y%> · bounce rate <0.NN> · usual
