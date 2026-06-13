@@ -103,3 +103,40 @@ def choppiness_k(df, n=14):
 Disclose the computed `k` (and `ci_median`) per stock in the report. The spread is
 data-dependent — a universe of similarly choppy names will share a `k`; that is correct,
 not a bug. The requirement is that `k` is computed from the stock, not a literal.
+
+## Block A4 — volume-fade annotation (quality flag, NOT a gate)
+
+Healthy pullbacks dry up on volume into the dip. Compare average volume on the dip
+(confirmed high → live low) vs the prior up-leg (prior confirmed low → confirmed high).
+Ratio < 1 = fading = healthy. This annotates conviction; it never rejects a candidate.
+
+```python
+def volume_fade(df, leg_start_ts, high_ts, live_low_ts):
+    """dip avg volume / up-leg avg volume. <1 = volume fading into the dip (healthy)."""
+    upleg = df.filter((pl.col("trade_timestamp") > leg_start_ts) &
+                      (pl.col("trade_timestamp") <= high_ts))
+    dip = df.filter((pl.col("trade_timestamp") > high_ts) &
+                    (pl.col("trade_timestamp") <= live_low_ts))
+    if upleg.height == 0 or dip.height == 0:
+        return {"vol_fade_ratio": None, "fading": None}   # too thin to judge; disclose
+    up_v = upleg["volume"].mean()
+    dip_v = dip["volume"].mean()
+    if up_v is None or up_v == 0:
+        raise ValueError("up-leg has no volume — cannot compute volume-fade")
+    ratio = dip_v / up_v
+    return {"vol_fade_ratio": ratio, "fading": ratio < 1.0}
+```
+
+## Block A5 — confirmed up-leg guard (reject range chop)
+
+A pullback only counts if the up-leg was a real uptrend, not sideways noise. Require the
+50-EMA to be rising across the leg (uses Block 1's `ema_50`).
+
+```python
+def upleg_is_uptrend(df, leg_start_ts, high_ts):
+    seg = df.filter((pl.col("trade_timestamp") >= leg_start_ts) &
+                    (pl.col("trade_timestamp") <= high_ts))
+    if seg.height < 2:
+        return False
+    return seg["ema_50"][-1] > seg["ema_50"][0]
+```
