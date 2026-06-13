@@ -48,3 +48,25 @@ def proxy_net(interval, W, m=3, R=8, lb=20):
 `recent_dip` is the deepest dip in the last `R` bars — a dip that printed a low and
 bounced still counts. The `1.5 * band_hi` cap rejects only blatant reversals; Stage B
 makes the fine call.
+
+## Block A2 — W self-calibration (run every screen; data drifts)
+
+W is NOT a frozen constant. Build the shortlist at three windows and measure agreement.
+If they agree, W is non-critical today; if not, take the union (inclusion-biased) and say so.
+
+```python
+def calibrate_W(interval, windows=(60, 120, 240), threshold=0.85):
+    sets = {W: set(proxy_net(interval, W)["symbol"].to_list()) for W in windows}
+    inter = set.intersection(*sets.values())
+    union = set.union(*sets.values())
+    overlap = len(inter) / len(union) if union else 0.0
+    if overlap >= threshold:
+        mid = windows[len(windows) // 2]
+        return {"mode": "stable", "overlap": overlap, "W_used": mid,
+                "shortlist": sorted(sets[mid])}
+    return {"mode": "sensitive", "overlap": overlap, "W_used": list(windows),
+            "shortlist": sorted(union)}
+```
+
+The result's `mode`/`overlap`/`W_used` MUST be disclosed in the report. `threshold=0.85`
+is itself stated and adjustable. Windows scale to the interval (these suit 1h).
