@@ -62,7 +62,14 @@ wrong — every stock's nature differs.
 2. Run the single-symbol workflow (steps 1–6) ONLY on the handful of survivors.
 3. Output a short ranked list, one plain line per stock:
    `SYMBOL — <action>: dipping X% vs its usual Y% dip; bounces ~Z% of the time;
-   buy zone ₹A–B, wrong below ₹C`. Put the raw numbers table in the details footer.
+   buy zone ₹A–B, wrong below ₹C (−X% from price)`. Put the raw numbers table in
+   the details footer, one row per analyzed stock, columns:
+   `Symbol | n dips | usual dip % | now off high % | live-low dip % | bounce rate |
+   live low ₹ (−%) | floor ₹ (−%)`. Mark a row ⚠ when the floor's % is smaller than
+   the live low's % (live low sits below the floor → near-term structure cracked).
+   (`dip %`, `now off high %` and `live-low dip %` are measured from the swing HIGH =
+   pullback depth; the `(−%)` beside each ₹ stop is measured from the latest CLOSE =
+   stop distance — same low, two reference points.)
 
 ## When to zoom in (multi-timeframe intelligence)
 
@@ -124,23 +131,31 @@ time — so call the reliability <weak / fair / strong> in plain words.
 **What to watch for / what to do:** <the buy zone in ₹, or "it's in the zone now">,
 and one line on conviction (size small if reliability is weak).
 
-**Where you'd be wrong:** close below **₹<live higher-low>** breaks this pullback
-(near-term stop). The deeper floor is **₹<prior confirmed higher-low>** — below that
-the whole uptrend is broken. Quote the near-term level as the working stop.
+**Where you'd be wrong:** close below **₹<live higher-low> (−X% from price)** breaks
+this pullback (near-term stop). The deeper floor is **₹<prior confirmed higher-low>
+(−Y% from price)** — below that the whole uptrend is broken. Quote the near-term level
+as the working stop.
 
 <If you zoomed: **Zoom (<finer frame>):** one line on the sharper swing low / stop the
 finer frame revealed, noted as a different, shorter-history frame.>
 
 ---
 *Details: <n> past dips found · usual depth <X–Y%> · bounce rate <0.NN> · usual
-anchor <ema_NN or "no clean EMA — structural">. Computed on <timeframe> data;
-EMAs derived on the fly. Structural evidence, not financial advice.*
+anchor <ema_NN or "no clean EMA — structural"> · stops: near-term ₹<live HL> (−X%),
+floor ₹<prior HL> (−Y%). Computed on <timeframe> data; EMAs derived on the fly.
+Structural evidence, not financial advice.*
 ```
 
 Translate every term: depth band → "usually dips X–Y%"; success_rate → "bounces N%
 of the time"; dominant_anchor 'none' → "dips don't reliably tag an EMA — they're
 structural"; invalidation → "where you'd be wrong". If `n_events < 5`, say plainly
 "too few past pullbacks to trust — low confidence" and stop dressing it up.
+
+Always print each ₹ stop level (live higher-low AND structural floor) with its %
+distance below the latest close — a price alone hides how tight or loose the stop is.
+Compute the % in Polars from the level and the latest close (`(close − level)/close
+* 100`), never eyeball it. A floor whose % is smaller than the live low's % means the
+live low sits below the floor → near-term structure already cracked; flag it.
 
 ## Hard rules
 

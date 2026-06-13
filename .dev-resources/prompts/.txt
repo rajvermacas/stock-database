@@ -302,3 +302,6 @@ find which stock is currentlly sitting at this dip percentage and ready to move 
 along with stop loss and target.
 
 Use hourly as well as daily timeframe. also mention what has changed recently that anticipates a upward move is coming quickly.
+------------------------
+
+do a stock screening to find out stocks to buy on pullback
