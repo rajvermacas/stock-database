@@ -15,9 +15,8 @@ CAVEATS = """\
 - **Equal-weight slots:** volatile stocks risk more rupees per slot than calm ones.
 """
 
+# Columns stored as fractions (0.18) — render as percent by ×100.
 PCT_COLS = {
-    "stoploss_pct",
-    "target_pct",
     "train_cagr",
     "test_cagr",
     "train_max_dd",
@@ -27,6 +26,8 @@ PCT_COLS = {
     "test_avg_win_pct",
     "test_avg_loss_pct",
 }
+# Columns already stored in percent units (8.0 == 8%) — render without scaling.
+ALREADY_PCT_COLS = {"stoploss_pct", "target_pct"}
 
 
 def render_markdown(table: pl.DataFrame, train: str, test: str, run_date: str) -> str:
@@ -66,7 +67,9 @@ def _md_table(table: pl.DataFrame) -> str:
         cells = []
         for h in headers:
             v = row[h]
-            if isinstance(v, float):
+            if h in ALREADY_PCT_COLS:
+                cells.append(f"{v:.0f}%")
+            elif isinstance(v, float):
                 cells.append(f"{v * 100:.1f}%" if h in PCT_COLS else f"{v:.2f}")
             else:
                 cells.append(str(v))

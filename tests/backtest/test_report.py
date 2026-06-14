@@ -38,6 +38,13 @@ def test_markdown_names_winner_with_numbers():
     assert "5%" in md and "12%" in md  # stoploss/target
 
 
+def test_table_does_not_double_scale_already_percent_cols():
+    md = render_markdown(_table(), "T", "S", "2026-06-14")
+    # stoploss_pct=5.0 must render "5%", never "500.0%".
+    assert "500.0%" not in md
+    assert "1200.0%" not in md
+
+
 def test_write_report_creates_both_files(tmp_path):
     md_path, csv_path = write_report(_table(), tmp_path, "2026-06-14", "T", "S")
     assert md_path.exists() and csv_path.exists()
