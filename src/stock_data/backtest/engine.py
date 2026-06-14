@@ -124,8 +124,8 @@ def allocate_slots(
     for c in candidates:
         by_entry.setdefault(c.entry_date, []).append(c)
 
-    slot_capital = cfg.capital / k_slots
     cash = cfg.capital
+    prev_equity = cfg.capital      # size today's entries on yesterday's equity
     open_positions: list[dict] = []
     taken: list[CandidateTrade] = []
     equity_points: list[float] = []
@@ -136,9 +136,12 @@ def allocate_slots(
         open_positions, cash = _free_exited(
             open_positions, day, cash, cfg.cost_per_leg
         )
-        # 2) entries: fill free slots from today's candidates (tie-break rel_vol)
+        # 2) entries: fill free slots from today's candidates (tie-break rel_vol).
+        #    Equal-weight, compounding: each slot = previous equity / K (no leverage,
+        #    no look-ahead since prev_equity is yesterday's close value).
         free = k_slots - len(open_positions)
-        if free > 0 and day in by_entry:
+        if free > 0 and day in by_entry and prev_equity > 0:
+            slot_capital = prev_equity / k_slots
             ranked = sorted(by_entry[day], key=lambda c: -c.rel_vol_at_signal)
             for c in ranked[:free]:
                 cash -= slot_capital * (1.0 + cfg.cost_per_leg)
@@ -155,7 +158,8 @@ def allocate_slots(
             * close_lookup[p["trade"].symbol].get(day, p["trade"].entry_price)
             for p in open_positions
         )
-        equity_points.append(cash + held_value)
+        prev_equity = cash + held_value
+        equity_points.append(prev_equity)
 
     return _ledger(taken, cfg.cost_per_leg), pl.Series("equity", equity_points)
 

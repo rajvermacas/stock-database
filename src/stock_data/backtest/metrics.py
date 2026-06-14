@@ -19,6 +19,10 @@ def cagr(equity: pl.Series, start: date, end: date) -> float:
     if years <= 0:
         raise DegenerateMetricError(f"Non-positive span {start}..{end}")
     final, initial = float(equity[-1]), float(equity[0])
+    if initial <= 0 or final <= 0:
+        raise DegenerateMetricError(
+            f"Non-positive equity (initial={initial}, final={final}) — account blew up"
+        )
     return (final / initial) ** (1.0 / years) - 1.0
 
 

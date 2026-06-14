@@ -90,3 +90,25 @@ def test_same_day_round_trip_frees_slot():
     ledger, _ = allocate_slots([same_day, later], arrays, days, 1, cfg)
     assert ledger.height == 2  # both taken; same-day trade did not block the slot
     assert set(ledger["symbol"].to_list()) == {"A", "B"}
+
+
+def test_dynamic_sizing_keeps_equity_positive_through_losses():
+    # A long run of -8% losing trades must shrink equity geometrically, never go
+    # negative (regression: fixed initial-capital sizing produced leverage/blowup).
+    cfg = BacktestConfig(capital=100.0, cost_bps_round_trip=0.0, max_hold_days=40)
+    n = 12
+    days = [date(2020, 1, d + 1) for d in range(n)]
+    candidates = []
+    for i in range(0, n - 1, 2):  # enter even day, exit next day at -8%
+        candidates.append(
+            CandidateTrade("A", i, days[i], days[i + 1], 100.0, 92.0, -0.08, 1.0, "stoploss")
+        )
+    closes = [100.0] * n
+    arrays = {
+        "A": _arrays(
+            "A", days, [100.0] * n, [100.0] * n, [92.0] * n, closes, [0] * n
+        )
+    }
+    _, equity = allocate_slots(candidates, arrays, days, 1, cfg)
+    assert equity.min() > 0  # never negative
+    assert equity[-1] < 100.0  # losses compounded down

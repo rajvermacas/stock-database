@@ -5,8 +5,14 @@ from datetime import date
 import polars as pl
 import pytest
 
-from stock_data.backtest.errors import ZeroTradesError
+from stock_data.backtest.errors import DegenerateMetricError, ZeroTradesError
 from stock_data.backtest.metrics import cagr, compute_metrics, max_drawdown
+
+
+def test_cagr_raises_on_non_positive_final_equity():
+    eq = pl.Series([100.0, -5.0])  # blown-up account must not yield a complex number
+    with pytest.raises(DegenerateMetricError):
+        cagr(eq, date(2020, 1, 1), date(2021, 1, 1))
 
 
 def test_max_drawdown_simple():
