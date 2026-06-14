@@ -53,6 +53,27 @@ def update_symbol(
     _execute(ctx.obj, symbol.strip())
 
 
+@app.command("backtest-bakeoff")
+def backtest_bakeoff(
+    ctx: typer.Context,
+    run_date: Annotated[
+        str, typer.Option("--run-date", help="YYYY-MM-DD label for the report")
+    ],
+    limit: Annotated[
+        int | None, typer.Option("--limit", help="Cap symbols (smoke test)")
+    ] = None,
+    capital: Annotated[float, typer.Option("--capital")] = 1_000_000.0,
+) -> None:
+    """Optimize 6 strategies on train, rank on test, write the bake-off report."""
+    from stock_data.backtest.cli import run_bakeoff
+
+    config = ctx.obj.config_path
+    configure_logging(load_config(config).paths.logs_dir)
+    md_path, csv_path = run_bakeoff(config, run_date, limit, capital)
+    typer.echo(f"Report: {md_path}")
+    typer.echo(f"CSV:    {csv_path}")
+
+
 def _execute(
     state: State,
     symbol: str | None,
