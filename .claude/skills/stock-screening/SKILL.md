@@ -33,8 +33,11 @@ running. Read-only against `market-data/`.
    history (`bars < max(60, W)`).
 2. **Stage B — bespoke confirm.** For each shortlisted symbol, run the Block A6 recipe:
    compose `pullback-finder`'s Blocks 1–8 with per-stock `k` (`choppiness_k`, Block A3),
-   the up-leg guard (`upleg_is_uptrend`, Block A5), and the volume-fade annotation
-   (`volume_fade`, Block A4). Risk model fixed: `stop_pct=0.03`, `horizon=15`.
+   the up-leg guard (`upleg_is_uptrend`, Block A5), the volume-fade annotation
+   (`volume_fade`, Block A4), and the per-stock learned horizon (`learn_horizon`, Block
+   A7). Fixed risk knob: `stop_pct=0.03` (the only frozen risk parameter). The horizon is
+   learned (`H_stock`); every event is scored at **both** `H_base=15` (comparable
+   yardstick) and `H_stock` (own clock) — see the comparability clause in "The law".
 3. **Stage C — tier + report.** Tier the confirmed candidates and write the report.
 
 ## Stage A — proxy net (see references/screening-blocks.md)
@@ -49,10 +52,13 @@ culls it); a wrong drop is fatal (Stage B never sees it). `W` self-calibrates ac
 
 Block A6. The SAME math `pullback-finder` runs for a single symbol, applied to each
 survivor, with: `k` computed per stock (not a literal), only pullbacks whose up-leg has a
-rising 50-EMA, and a volume-fade flag on the live dip. Produces each stock's own depth
-band, bounce rate, dominant anchor, live low (near-term stop) + structural floor, each
-stop with its **% distance from the latest close**. `n_events < 5` → low-confidence;
-never invent a signature.
+rising 50-EMA, a volume-fade flag on the live dip, and a learned recovery horizon
+`H_stock` (Block A7). Produces each stock's own depth band, **dual bounce rate**
+(`bounce@base` at the fixed `H_base` yardstick + `bounce@learned` at `H_stock`, with their
+gap `Δ`), recovery class (fast/medium/slow), dominant anchor, live low (near-term stop) +
+structural floor, each stop with its **% distance from the latest close**. `n_events < 5`
+→ low-confidence; never invent a signature. Fewer than 5 events that ever recover → cannot
+learn the horizon: fall back to `H_base` and label low-confidence.
 
 ## Stage C — tier + report
 
@@ -61,14 +67,20 @@ inclusion-biased and catches names that dipped recently but have since recovered
 high; those are not dip-buys.
 
 - **BUY THE DIP** — price is *still in the dip now* (`now off high` is positive and inside
-  the stock's own band), uptrend intact, live low above floor, and bounce rate fair or
-  better (≈ 0.5+). Lead the report with the few highest-conviction names (deepest-in-band
-  with the strongest bounce rate and a fading-volume dip), not the whole list.
+  the stock's own band), uptrend intact, live low above floor, and `bounce@base` fair or
+  better (≈ 0.5+). Rank by `bounce@base` first (the comparable rate), then prefer
+  `fast`/`medium` recovery and a small `Δ`; a fading-volume dip and deepest-in-band break
+  ties. Lead with the few highest-conviction names, not the whole list. Quote each pick's
+  recovery class and expected hold ("resumes in ~D trading days") in plain words.
+- **PATIENT BUY** — qualifies as a BUY but `recovery_class` is `slow`: the edge is real
+  yet needs a long hold. Report it **separately** with its expected hold time; never mix it
+  in with quick setups.
 - **WATCH / already bounced** — qualified on Stage A but `now off high` ≤ 0 (price has
   recovered to/above the recent high) or the live low already bounced well off the band.
   Note them; they are not buys now.
-- **SPECULATIVE** — qualifies but `n_events` thin (low-confidence) **or** bounce rate weak
-  (< ~0.5); size small.
+- **SPECULATIVE** — qualifies but `n_events` thin (low-confidence), **or** `bounce@base`
+  weak (< ~0.5), **or** *borrowed time* (`Δ ≥ 0.15` while `bounce@base < 0.5` — the rate
+  exists only because the long horizon manufactured it). Size small.
 - **CAUTION** — live low has dropped below the prior higher-low (near-term structure
   cracked, floor % < live-low %).
 - **AVOID** — recent dip far beyond its own band (reversal risk, not a routine dip).
@@ -81,14 +93,16 @@ state how many more cleared the bar (no silent truncation).
 **Ranked line (one per buy candidate):**
 
 ```
-SYMBOL — <action>: dipping X% vs its usual Y% dip; bounces ~Z% of the time;
-buy zone ₹A–B, wrong below ₹C (−X% from price)
+SYMBOL — <action> (<recovery class>): dipping X% vs its usual Y% dip;
+bounces ~Z% @base / ~Z'% on its own ~D-day clock (Δ +d); buy zone ₹A–B,
+wrong below ₹C (−X% from price)
 ```
 
 **Footer table, one row per analyzed stock, columns:**
 
 ```
-Symbol | n dips | usual dip % | now off high % | live-low dip % | bounce rate |
+Symbol | n dips | usual dip % | now off high % | live-low dip % |
+bounce@base | bounce@learned (Δ) | H_stock (≈D days) | recovery class |
 vol-fade | live low ₹ (−%) | floor ₹ (−%)
 ```
 
@@ -96,28 +110,43 @@ Mark a row ⚠ when the floor's % is smaller than the live low's % (live low bel
 floor → near-term structure cracked). `dip %`, `now off high %`, and `live-low dip %` are
 measured from the swing HIGH (depth); each `(−%)` beside a ₹ stop is measured from the
 latest CLOSE (stop distance) — same low, two reference points. `vol-fade` shows the
-dip/up-leg volume ratio (✓ if < 1 = volume fading = healthy).
+dip/up-leg volume ratio (✓ if < 1 = volume fading = healthy). `bounce@base` is the
+comparable rate at the fixed `H_base` yardstick; `bounce@learned` is the rate at the
+stock's own `H_stock`; `Δ = learned − base` flags borrowed time when large.
 
 **Disclosures every run:** the W `mode` (stable/sensitive) + `overlap` + `W_used`;
-computed `k` per stock; count excluded for short history; survivorship bias (universe
-selected on today's uptrend); EMAs/ATR computed on the fly.
+computed `k` per stock; per stock `H_stock` (bars and ≈ trading days), its recovery class,
+median & P75 recovery latency, and whether `H_stock` was clamped; the `H_base` yardstick
+and the clamp range used; `bars_per_day` (derived from the data, not hardcoded); count
+excluded for short history; survivorship bias (universe selected on today's uptrend);
+EMAs/ATR computed on the fly.
 
 **Empty shortlist → report plainly "no buyable dips today."** Never force picks, never
 fall back to closest-to-band names.
 
 Lead with the answer in plain words (translate the machinery — band → "usually dips
-X–Y%", success_rate → "bounces N% of the time", anchor 'none' → "dips are structural").
-The numbers live in the footer. Structural evidence, not financial advice.
+X–Y%", success_rate → "bounces N% of the time", `H_stock` → "usually recovers in ~D
+trading days", anchor 'none' → "dips are structural"). The numbers live in the footer.
+Structural evidence, not financial advice.
 
 ## The law — no frozen pattern constants
 
-> Every **pattern** parameter (W, k, noise filter, depth bands) is derived from or
-> validated against the current data **at screen time** and disclosed in the output.
-> None is a hardcoded constant trusted across runs, because the universe and each
-> stock's behavior drift.
+> Every **pattern** parameter (W, k, noise filter, depth bands, **and the recovery horizon
+> `H_stock`**) is derived from or validated against the current data **at screen time** and
+> disclosed in the output. None is a hardcoded constant trusted across runs, because the
+> universe and each stock's behavior drift.
 >
-> **Risk** knobs (3% hard stop, ~15-bar horizon) stay fixed — they are the trader's
-> model, stated explicitly and kept distinct from pattern parameters.
+> The **3% hard stop is the only fixed risk knob** — it is the trader's loss tolerance, not
+> a property of the stock. The **horizon is learned** (`H_stock`, Block A7), because how
+> long a stock needs to resume is its own behavior, not the trader's preference.
+>
+> **Comparability clause (mandatory):** a learned horizon can only *add* wins (a longer
+> window never removes a win), so it mechanically lifts bounce rates and breaks cross-stock
+> comparability. Therefore every screen MUST report **both** `bounce@base` (a fixed
+> `H_base` yardstick, identical for all stocks) **and** `bounce@learned` (`H_stock`), plus
+> `H_stock` and its fast/slow class. A high `bounce@learned` resting on a large `H_stock`
+> is *borrowed time* and must be labeled as such — never reported as a fast, comparable
+> edge.
 
 ## Hard rules
 
@@ -141,6 +170,9 @@ The numbers live in the footer. Structural evidence, not financial advice.
 | Symbol file missing / empty | Quote the error, skip that symbol, disclose. |
 | Shortlist empty | Report "no buyable dips today." No forced picks. |
 | Survivor with < 5 past dips | Label low-confidence; do not invent a signature. |
+| < 5 events ever recover | Cannot learn `H_stock`; fall back to `H_base`, mark low-confidence. |
+| `H_stock` hit the clamp | Disclose "clamped" — true recovery latency exceeds the cap (very slow grinder). |
+| Borrowed time (`Δ ≥ 0.15` and `bounce@base < 0.5`) | Demote to SPECULATIVE; never lead BUY. |
 | W-sensitive run (overlap < 0.85) | Use the union shortlist; disclose mode + overlap. |
 
 This is structural evidence, not financial advice.
