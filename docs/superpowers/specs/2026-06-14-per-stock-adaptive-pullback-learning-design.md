@@ -120,16 +120,20 @@ The prefilter must:
 
 - Be relearned from the stock's own data every run
 - Use the stock's current-regime behavior
-- Optimize primarily for historical recall of the full learner's eligible decisions
+- Optimize primarily for historical recall of raw causal profitable opportunities
+  under the fixed 3% stop
 - Retain uncertain and borderline setups
 - Exclude a stock only when its own evidence confidently identifies it as a
   non-candidate
 - Use latency only as a secondary tie-breaker between equally high-recall parameter
   sets
 
-The prefilter must not use universe-wide behavioral thresholds. Its historical
-recall is evaluated causally against the full learner's decisions for the same
-stock.
+The prefilter must not use universe-wide behavioral thresholds. A historical
+prefilter opportunity is labeled from subsequent raw price movement after the
+causal observation point: it is positive when price offers positive raw return
+before the fixed 3% stop or the causally detected regime ends. Future movement is
+used only as the training label; prefilter features remain causal. The full learner
+still runs only for current prefilter survivors.
 
 ### 5. Full Per-Stock Learner
 
@@ -346,7 +350,8 @@ each stock.
 
 ### Prefilter Quality
 
-- Measure causal prefilter recall against historical full-learner decisions.
+- Measure causal prefilter recall against historical raw profitable opportunities
+  under the fixed 3% stop.
 - Confirm uncertain and borderline cases remain eligible for the full learner.
 - Confirm latency optimization never overrides the primary recall objective.
 
