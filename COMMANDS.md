@@ -114,3 +114,34 @@ Exit code: `2`.
 
 Yahoo availability and unsupported-range failures are processed per symbol and
 exit with code `1`; the message includes symbol, interval, start, and end.
+
+## Analyze One Stock Pullback
+
+Every argument is required. The learner derives behavioral parameters from that
+stock's current data on every run.
+
+```bash
+stock-pullback analyze \
+  --prices-root market-data/prices \
+  --interval 1h \
+  --symbol BALAMINES.NS \
+  --output json
+```
+
+The JSON decision is `buy`, `watch`, or `abstain`. A latest-bar setup has a pending
+next-bar-open entry; its entry and stop prices remain null until that open exists.
+Every evaluated historical trade uses the fixed 3% stop from actual entry.
+
+## Screen Pullback Universe
+
+```bash
+stock-pullback screen \
+  --prices-root market-data/prices \
+  --interval 1h \
+  --output markdown
+```
+
+Use `--output json` for machine-readable learned parameters. The screen validates
+the universe, learns a high-recall prefilter independently per stock, fully learns
+survivors, ranks positive decisions, and discloses exclusions and abstentions. It
+never substitutes a different timeframe or forces a pick.

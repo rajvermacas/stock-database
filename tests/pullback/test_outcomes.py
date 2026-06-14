@@ -1,3 +1,5 @@
+import pytest
+
 from stock_data.pullback.models import OutcomeStatus
 from stock_data.pullback.outcomes import evaluate_target, trace_path
 
@@ -23,6 +25,21 @@ def test_same_bar_stop_and_target_is_unknown(price_frame) -> None:
     )
     outcome = trace_path(prices, 0, 2)
     assert evaluate_target(prices, outcome, 0.04, 2) == OutcomeStatus.UNKNOWN
+
+
+def test_path_does_not_accumulate_gains_after_stop(price_frame) -> None:
+    prices = price_frame([100, 100, 100, 100]).with_columns(
+        prices_column("high", [100.0, 101.0, 160.0, 170.0]),
+        prices_column("low", [100.0, 96.0, 100.0, 100.0]),
+    )
+
+    outcome = trace_path(prices, detection_index=0, regime_end_index=None)
+
+    assert outcome.status == OutcomeStatus.FAILURE
+    assert outcome.path is not None
+    assert outcome.mfe_fraction == pytest.approx(
+        prices["high"][1] / outcome.path.entry_price - 1
+    )
 
 
 def prices_column(name: str, values: list[float]):

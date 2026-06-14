@@ -16,8 +16,9 @@ Python 3.12 or newer is required.
 python -m pip install -e '.[dev]'
 ```
 
-This installs the `stock-data` command. See [COMMANDS.md](COMMANDS.md) for every
-supported command with sample input, output, and exit codes.
+This installs the `stock-data` and `stock-pullback` commands. See
+[COMMANDS.md](COMMANDS.md) for supported commands with sample input, output, and
+exit codes.
 
 ## Configuration
 
@@ -157,3 +158,10 @@ pytest -v
 ruff check src tests
 ruff format --check src tests
 ```
+
+## Adaptive Pullback Learning
+
+`stock-pullback` relearns behavioral parameters independently for every stock on
+every run. It uses causal price action and returns one learned parameter set or
+abstains. The only fixed trading parameter is the trader's 3% stop, measured from
+actual next-bar-open entry. Timeframe, symbol, and output format never default.

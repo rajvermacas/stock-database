@@ -8,6 +8,8 @@ import pytest
     [
         "stock-data --config config/stock-data.toml update-all",
         "stock-data --config config/stock-data.toml update-symbol RELIANCE.NS",
+        "stock-pullback analyze",
+        "stock-pullback screen",
     ],
 )
 def test_commands_document_contains_supported_commands(command: str) -> None:
@@ -73,3 +75,22 @@ def test_chart_structure_skill_documents_required_contract() -> None:
         "confidence is not probability",
     ]:
         assert required in text
+
+
+@pytest.mark.parametrize(
+    "skill",
+    ["stock-screening", "pullback-finder"],
+)
+def test_pullback_skills_document_adaptive_contract(skill: str) -> None:
+    text = Path(f".agents/skills/{skill}/SKILL.md").read_text()
+    for required in [
+        "every run",
+        "next-bar-open",
+        "3%",
+        "only fixed trading parameter",
+        "abstain",
+        "stock-pullback",
+    ]:
+        assert required in text
+    for forbidden in ["horizon=15", "n_events < 5", "W_used", "heredoc"]:
+        assert forbidden not in text

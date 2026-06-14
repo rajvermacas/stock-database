@@ -68,9 +68,7 @@ def _add_path_features(frame: pl.DataFrame) -> pl.DataFrame:
     directional_run = _directional_runs(signs)
     return frame.with_columns(
         pl.Series("directional_run", directional_run, dtype=pl.Int64),
-        ((pl.col("close") / pl.col("high").cum_max()) - 1).alias(
-            "expanding_drawdown"
-        ),
+        ((pl.col("close") / pl.col("high").cum_max()) - 1).alias("expanding_drawdown"),
         ((pl.col("close") / pl.col("low").cum_min()) - 1).alias("expanding_runup"),
     )
 

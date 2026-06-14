@@ -12,6 +12,10 @@ def test_nested_folds_are_strictly_causal() -> None:
         assert all(inner.train_end < inner.validation_start for inner in outer.inner)
 
 
-def test_too_few_regimes_abstain() -> None:
+def test_no_regimes_abstain() -> None:
     with pytest.raises(InsufficientEvidenceError):
-        nested_folds((Regime(0, 10, 1),))
+        nested_folds(())
+
+
+def test_single_learned_regime_has_no_artificial_folds() -> None:
+    assert nested_folds((Regime(0, 10, 1),)) == ()

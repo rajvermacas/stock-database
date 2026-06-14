@@ -13,13 +13,19 @@ from stock_data.pullback.candidates import (
 from stock_data.pullback.errors import InsufficientEvidenceError, PullbackError
 from stock_data.pullback.features import causal_features, finite_feature_matrix
 from stock_data.pullback.models import (
+    STOP_LOSS_FRACTION,
     Decision,
     FeatureBand,
+    OutcomeStatus,
     ParameterSet,
     StockDecision,
 )
-from stock_data.pullback.outcomes import trace_path
-from stock_data.pullback.regimes import distance_boundaries, fit_regimes, regime_distances
+from stock_data.pullback.outcomes import evaluate_target, trace_path
+from stock_data.pullback.regimes import (
+    distance_boundaries,
+    fit_regimes,
+    regime_distances,
+)
 from stock_data.pullback.selection import CandidateScore, select_parameter_set
 from stock_data.pullback.sequences import sequence_length_candidates
 from stock_data.pullback.walk_forward import nested_folds
@@ -36,23 +42,33 @@ def learn_stock(prices: pl.DataFrame) -> StockDecision:
         nested_folds(regimes)
         outcomes = _observed_outcomes(prices, indices, regimes)
         parameter = _derive_parameter_set(features, matrix, regimes, outcomes)
-        selected = select_parameter_set((_score_candidate(parameter, outcomes),))
+        score, recovery_probability = _score_candidate(prices, parameter, outcomes)
+        selected = select_parameter_set((score,))
         if selected.parameter_set is None:
             return _abstain(symbol, "learned setup does not beat abstaining")
-        return _current_decision(prices, features, selected.parameter_set, selected.adjusted_return)
+        return _current_decision(
+            prices,
+            features,
+            selected.parameter_set,
+            score.expected_return,
+            selected.adjusted_return,
+            recovery_probability,
+        )
     except PullbackError as exc:
         LOGGER.info("Pullback learner abstained symbol=%s reason=%s", symbol, exc)
         return _abstain(symbol, str(exc))
 
 
 def _observed_outcomes(prices, indices, regimes):
-    regime_ends = [int(indices[regime.end_index - 1]) for regime in regimes]
     outcomes = []
-    for regime_end in regime_ends:
-        regime_start = 0 if not outcomes else outcomes[-1][0] + 1
+    for regime in regimes:
+        if regime.weight <= 0:
+            continue
+        regime_start = int(indices[regime.start_index])
+        regime_end = int(indices[regime.end_index - 1])
         for detection in range(regime_start, regime_end):
-            outcomes.append((detection, trace_path(prices, detection, regime_end)))
-    usable = tuple(outcome for _, outcome in outcomes if outcome.path is not None)
+            outcomes.append(trace_path(prices, detection, regime_end))
+    usable = tuple(outcome for outcome in outcomes if outcome.path is not None)
     if not usable:
         raise InsufficientEvidenceError("no causal next-open outcomes")
     return usable
@@ -81,23 +97,47 @@ def _derive_parameter_set(features, matrix, regimes, outcomes):
     )
 
 
-def _score_candidate(parameter, outcomes):
+def _score_candidate(prices, parameter, outcomes):
+    statuses = [
+        evaluate_target(prices, outcome, parameter.target, parameter.horizon_bars)
+        for outcome in outcomes
+    ]
     returns = np.asarray(
-        [outcome.mfe_fraction for outcome in outcomes if outcome.mfe_fraction is not None]
+        [
+            parameter.target if status == OutcomeStatus.SUCCESS else -STOP_LOSS_FRACTION
+            for status in statuses
+            if status in (OutcomeStatus.SUCCESS, OutcomeStatus.FAILURE)
+        ]
     )
+    if not len(returns):
+        raise InsufficientEvidenceError("no resolved target outcomes")
     expected = float(returns.mean())
     uncertainty = float(returns.std())
     error = float(np.abs(returns - expected).mean())
-    return CandidateScore(parameter, expected, (uncertainty,), (error,))
+    recovery = float((returns > 0).mean())
+    return CandidateScore(parameter, expected, (uncertainty,), (error,)), recovery
 
 
-def _current_decision(prices, features, parameter, adjusted_return):
+def _current_decision(
+    prices,
+    features,
+    parameter,
+    expected_return,
+    adjusted_return,
+    recovery_probability,
+):
     last = features.row(-1, named=True)
     depth = last["expanding_drawdown"]
-    in_band = depth is not None and parameter.dip_band[0] <= depth <= parameter.dip_band[1]
+    in_band = (
+        depth is not None and parameter.dip_band[0] <= depth <= parameter.dip_band[1]
+    )
     decision = Decision.BUY if in_band and adjusted_return > 0 else Decision.WATCH
     timestamp = prices["trade_timestamp"][-1]
-    reason = "current causal setup matches learned dip band" if in_band else "current setup outside learned dip band"
+    reason = (
+        "current causal setup matches learned dip band"
+        if in_band
+        else "current setup outside learned dip band"
+    )
     return StockDecision(
         symbol=prices["symbol"][0],
         decision=decision,
@@ -106,9 +146,9 @@ def _current_decision(prices, features, parameter, adjusted_return):
         entry_price=None,
         stop_price=None,
         parameter_set=parameter,
-        expected_return=adjusted_return,
+        expected_return=expected_return,
         adjusted_expected_return=adjusted_return,
-        recovery_probability=None,
+        recovery_probability=recovery_probability,
     )
 
 

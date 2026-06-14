@@ -61,15 +61,14 @@ def distance_boundaries(distances: tuple[RegimeDistance, ...]) -> tuple[float, .
 def _select_endpoints(matrix: np.ndarray) -> tuple[int, ...]:
     observations, features = matrix.shape
     min_size = features + 1
-    candidates = [(observations,)]
-    algorithm = rpt.Binseg(model="l2", min_size=min_size).fit(matrix)
-    count = 1
-    while True:
-        try:
-            candidates.append(tuple(algorithm.predict(n_bkps=count)))
-            count += 1
-        except BadSegmentationParameters:
-            break
+    penalty = features * math.log(observations)
+    try:
+        detected = tuple(
+            rpt.Pelt(model="l2", min_size=min_size).fit(matrix).predict(pen=penalty)
+        )
+    except BadSegmentationParameters:
+        detected = (observations,)
+    candidates = {(observations,), detected}
     return min(candidates, key=lambda endpoints: _segmentation_bic(matrix, endpoints))
 
 
@@ -102,4 +101,6 @@ def _validate_matrix(matrix: np.ndarray) -> None:
     if matrix.ndim != 2 or len(matrix) < 2:
         raise InsufficientEvidenceError("regime learning requires a feature matrix")
     if not np.isfinite(matrix).all():
-        raise InsufficientEvidenceError("regime feature matrix contains non-finite values")
+        raise InsufficientEvidenceError(
+            "regime feature matrix contains non-finite values"
+        )

@@ -16,10 +16,10 @@ class Fold:
 
 
 def nested_folds(regimes: tuple[Regime, ...]) -> tuple[Fold, ...]:
-    if len(regimes) < 3:
+    if not regimes:
         raise InsufficientEvidenceError("nested walk-forward requires observed regimes")
     outer = []
-    for index in range(2, len(regimes)):
+    for index in range(1, len(regimes)):
         inner = _inner_folds(regimes[:index])
         outer.append(
             Fold(

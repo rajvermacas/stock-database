@@ -19,7 +19,11 @@ def trace_path(
         return _pending()
     entry = float(prices["open"][entry_index])
     path = TradePath(entry_index, entry, entry * (1 - STOP_LOSS_FRACTION))
-    end = prices.height if regime_end_index is None else min(regime_end_index + 1, prices.height)
+    end = (
+        prices.height
+        if regime_end_index is None
+        else min(regime_end_index + 1, prices.height)
+    )
     future = prices.slice(entry_index, end - entry_index)
     return _summarize_path(future, path)
 
@@ -48,9 +52,13 @@ def evaluate_target(
 def _summarize_path(future: pl.DataFrame, path: TradePath) -> TradeOutcome:
     highs = future["high"].to_numpy()
     lows = future["low"].to_numpy()
+    stop_hits = np.flatnonzero(lows <= path.stop_price)
+    if len(stop_hits):
+        end = int(stop_hits[0]) + 1
+        highs = highs[:end]
+        lows = lows[:end]
     mfe_values = highs / path.entry_price - 1
     mae_values = lows / path.entry_price - 1
-    stop_hits = np.flatnonzero(lows <= path.stop_price)
     status = OutcomeStatus.FAILURE if len(stop_hits) else OutcomeStatus.CENSORED
     return TradeOutcome(
         status=status,

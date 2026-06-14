@@ -29,7 +29,9 @@ def sequence_vector(
     return ((values[:, usable] - center[usable]) / scale[usable]).ravel()
 
 
-def sequence_length_candidates(durations: list[int] | tuple[int, ...]) -> tuple[int, ...]:
+def sequence_length_candidates(
+    durations: list[int] | tuple[int, ...],
+) -> tuple[int, ...]:
     candidates = sorted({int(value) for value in durations if value > 0})
     if not candidates:
         raise InsufficientEvidenceError("no observed sequence durations")

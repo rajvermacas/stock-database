@@ -9,9 +9,7 @@ def test_constant_features_yield_one_regime() -> None:
 
 def test_variance_shift_yields_multiple_regimes() -> None:
     rng = np.random.default_rng(7)
-    matrix = np.vstack(
-        [rng.normal(0, 0.1, (60, 3)), rng.normal(2, 1.0, (60, 3))]
-    )
+    matrix = np.vstack([rng.normal(0, 0.1, (60, 3)), rng.normal(2, 1.0, (60, 3))])
     regimes = fit_regimes(matrix)
     assert len(regimes) > 1
     assert any(abs(regime.end_index - 60) <= 15 for regime in regimes[:-1])

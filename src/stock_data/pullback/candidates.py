@@ -16,7 +16,9 @@ class OutcomeCandidates:
 
 def transition_boundaries(values: np.ndarray, labels: np.ndarray) -> tuple[float, ...]:
     if len(values) != len(labels) or not len(values):
-        raise InsufficientEvidenceError("values and labels must be non-empty and aligned")
+        raise InsufficientEvidenceError(
+            "values and labels must be non-empty and aligned"
+        )
     order = np.argsort(values, kind="stable")
     ordered_values = values[order]
     ordered_labels = labels[order]
@@ -31,7 +33,11 @@ def transition_boundaries(values: np.ndarray, labels: np.ndarray) -> tuple[float
 
 def outcome_candidates(outcomes: tuple[TradeOutcome, ...]) -> OutcomeCandidates:
     horizons = sorted(
-        {outcome.bars_to_mfe + 1 for outcome in outcomes if outcome.bars_to_mfe is not None}
+        {
+            outcome.bars_to_mfe + 1
+            for outcome in outcomes
+            if outcome.bars_to_mfe is not None
+        }
     )
     targets = sorted(
         {

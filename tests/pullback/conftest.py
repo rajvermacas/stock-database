@@ -19,9 +19,7 @@ def price_frame():
         if volumes is None:
             volumes = [1000 + index for index in range(len(closes))]
         start = datetime(2026, 1, 1, 9, 15, tzinfo=IST)
-        timestamps = [
-            start + timedelta(hours=index) for index in range(len(closes))
-        ]
+        timestamps = [start + timedelta(hours=index) for index in range(len(closes))]
         return pl.DataFrame(
             {
                 "symbol": [symbol] * len(closes),

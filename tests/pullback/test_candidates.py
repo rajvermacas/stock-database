@@ -12,8 +12,12 @@ def test_boundaries_come_only_from_observed_label_transitions() -> None:
 
 def test_horizon_and_target_candidates_are_observed_outcomes() -> None:
     paths = (
-        TradeOutcome(OutcomeStatus.CENSORED, TradePath(1, 100, 97), 0.04, -0.01, None, None, 2),
-        TradeOutcome(OutcomeStatus.CENSORED, TradePath(1, 100, 97), 0.08, -0.02, None, None, 5),
+        TradeOutcome(
+            OutcomeStatus.CENSORED, TradePath(1, 100, 97), 0.04, -0.01, None, None, 2
+        ),
+        TradeOutcome(
+            OutcomeStatus.CENSORED, TradePath(1, 100, 97), 0.08, -0.02, None, None, 5
+        ),
     )
     candidates = outcome_candidates(paths)
     assert candidates.horizons == (3, 6)
