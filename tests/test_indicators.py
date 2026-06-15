@@ -8,6 +8,7 @@ import talib
 from stock_data.indicators import (
     INDICATOR_COLUMNS,
     INDICATOR_SCHEMA,
+    STRICT_INDICATOR_COLUMNS,
     IndicatorError,
     calculate_indicators,
 )
@@ -87,7 +88,7 @@ def test_output_has_strict_finite_schema() -> None:
     assert np.isfinite(result.select(INDICATOR_COLUMNS).to_numpy()).all()
 
 
-def test_non_finite_indicator_rows_are_excluded() -> None:
+def test_zero_volume_rows_keep_null_relative_volume() -> None:
     prices = price_history().with_columns(
         pl.when(pl.int_range(pl.len()) < 400)
         .then(0)
@@ -96,8 +97,26 @@ def test_non_finite_indicator_rows_are_excluded() -> None:
     )
     result = calculate_indicators(prices)
     assert result is not None
-    assert result["trade_timestamp"].min() == prices["trade_timestamp"][400]
-    assert np.isfinite(result.select(INDICATOR_COLUMNS).to_numpy()).all()
+    # Zero-volume rows are retained, not dropped: relative_volume_20 is null
+    # (undefined) there, every other indicator stays present and finite.
+    assert result["trade_timestamp"].min() == prices["trade_timestamp"][365]
+    assert result["relative_volume_20"].null_count() > 0
+    strict = result.select(STRICT_INDICATOR_COLUMNS)
+    assert strict.null_count().select(pl.sum_horizontal(pl.all())).item() == 0
+    assert np.isfinite(strict.to_numpy()).all()
+
+
+def test_zero_volume_instrument_nulls_relative_volume() -> None:
+    prices = price_history().with_columns((pl.col("volume") * 0).alias("volume"))
+    result = calculate_indicators(prices)
+    assert result is not None
+    assert not result.is_empty()
+    # An index has no volume at all: relative_volume_20 is null for every row,
+    # all price-based indicators remain finite.
+    assert result["relative_volume_20"].null_count() == result.height
+    strict = result.select(STRICT_INDICATOR_COLUMNS)
+    assert strict.null_count().select(pl.sum_horizontal(pl.all())).item() == 0
+    assert np.isfinite(strict.to_numpy()).all()
 
 
 def test_insufficient_history_returns_none() -> None:

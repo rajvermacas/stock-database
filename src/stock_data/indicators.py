@@ -40,6 +40,13 @@ INDICATOR_SCHEMA = {
     "trade_timestamp": pl.Datetime(time_unit="us", time_zone="Asia/Kolkata"),
     **{column: pl.Float64 for column in INDICATOR_COLUMNS},
 }
+# relative_volume_20 is undefined for zero-volume instruments (e.g. indices),
+# where volume_ema_20 is 0. It may be null; every other indicator must be
+# present and finite.
+NULLABLE_INDICATOR_COLUMNS = ("relative_volume_20",)
+STRICT_INDICATOR_COLUMNS = [
+    column for column in INDICATOR_COLUMNS if column not in NULLABLE_INDICATOR_COLUMNS
+]
 
 
 class IndicatorError(ValueError):
@@ -61,7 +68,7 @@ def calculate_indicators(prices: pl.DataFrame) -> pl.DataFrame | None:
         result = result.cast(INDICATOR_SCHEMA, strict=True)
         result = result.filter(
             pl.all_horizontal(
-                [pl.col(column).is_finite() for column in INDICATOR_COLUMNS]
+                [pl.col(column).is_finite() for column in STRICT_INDICATOR_COLUMNS]
             )
         )
         _validate_result(result)
@@ -121,7 +128,10 @@ def _add_calendar_columns(frame: pl.DataFrame) -> pl.DataFrame:
 
 def _add_derived_columns(frame: pl.DataFrame) -> pl.DataFrame:
     frame = frame.with_columns(
-        (pl.col("volume") / pl.col("volume_ema_20")).alias("relative_volume_20"),
+        pl.when(pl.col("volume_ema_20") == 0)
+        .then(None)
+        .otherwise(pl.col("volume") / pl.col("volume_ema_20"))
+        .alias("relative_volume_20"),
         (pl.col("atr_14") / pl.col("close") * 100).alias("atr_percent_14"),
         pl.col("ema_20").alias("band_middle_20"),
         (pl.col("ema_20") + 2 * pl.col("close_std_20")).alias("band_upper_20_2"),
@@ -159,7 +169,8 @@ def _validate_result(result: pl.DataFrame) -> None:
         raise IndicatorError("Indicator result is empty")
     if result.schema != INDICATOR_SCHEMA:
         raise IndicatorError(f"Unexpected indicator schema: {result.schema}")
-    if result.null_count().select(pl.sum_horizontal(pl.all())).item() > 0:
+    strict = result.select(pl.exclude(*NULLABLE_INDICATOR_COLUMNS))
+    if strict.null_count().select(pl.sum_horizontal(pl.all())).item() > 0:
         raise IndicatorError("Indicator result contains nulls")
-    if not np.isfinite(result.select(INDICATOR_COLUMNS).to_numpy()).all():
+    if not np.isfinite(result.select(STRICT_INDICATOR_COLUMNS).to_numpy()).all():
         raise IndicatorError("Indicator result contains non-finite values")
