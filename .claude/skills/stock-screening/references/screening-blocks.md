@@ -109,23 +109,30 @@ not a bug. The requirement is that `k` is computed from the stock, not a literal
 Healthy pullbacks dry up on volume into the dip. Compare average volume on the dip
 (confirmed high → live low) vs the prior up-leg (prior confirmed low → confirmed high).
 Ratio < 1 = fading = healthy. This annotates conviction; it never rejects a candidate.
-If either leg is empty or has zero/None volume (thin or halted bars) it returns `None`,
-shown as "n/a" in the report — never an error, never a rejection. (A single illiquid name
-must not abort a universe screen.)
+Zero/None-volume bars (exchange open-hour no-prints, halted bars) are dropped from each
+leg first so they don't drag the means — they are data artifacts, not genuine quiet hours,
+and the two legs rarely hold the same count of them. If a leg then has no real-volume bars
+left it returns `None`, shown as "n/a" in the report — never an error, never a rejection.
+(A single illiquid name must not abort a universe screen.)
 
 ```python
 def volume_fade(df, leg_start_ts, high_ts, live_low_ts):
-    """dip avg volume / up-leg avg volume. <1 = volume fading into the dip (healthy)."""
+    """dip avg volume / up-leg avg volume. <1 = volume fading into the dip (healthy).
+    Zero/None-volume bars (open-hour no-prints, halted bars) are dropped from BOTH legs
+    first — they are artifacts, not real quiet hours, and would bias each mean toward zero
+    unevenly (the legs rarely carry the same count of them)."""
     upleg = df.filter((pl.col("trade_timestamp") > leg_start_ts) &
-                      (pl.col("trade_timestamp") <= high_ts))
+                      (pl.col("trade_timestamp") <= high_ts) &
+                      (pl.col("volume") > 0))
     dip = df.filter((pl.col("trade_timestamp") > high_ts) &
-                    (pl.col("trade_timestamp") <= live_low_ts))
+                    (pl.col("trade_timestamp") <= live_low_ts) &
+                    (pl.col("volume") > 0))
     if upleg.height == 0 or dip.height == 0:
-        return {"vol_fade_ratio": None, "fading": None}   # too thin to judge; disclose
+        return {"vol_fade_ratio": None, "fading": None}   # no real-volume bars left; disclose
     up_v = upleg["volume"].mean()
     dip_v = dip["volume"].mean()
-    if not up_v or dip_v is None:
-        return {"vol_fade_ratio": None, "fading": None}   # zero/None volume (thin/halted bars)
+    if not up_v or not dip_v:
+        return {"vol_fade_ratio": None, "fading": None}   # degenerate mean; too thin to judge
     ratio = dip_v / up_v
     return {"vol_fade_ratio": ratio, "fading": ratio < 1.0}
 ```
@@ -221,7 +228,8 @@ def learn_horizon(df, events, q=0.75, h_max_days=6.0, h_min_days=0.5, min_recove
 
 def recovery_class(H_stock, bpd):
     days = H_stock / bpd
-    return "fast" if days <= 1.0 else "medium" if days <= 4.0 else "slow"
+    # trading-day buckets: <3d fast, 3d-<1wk medium, >=1wk slow (1 week = 5 trading days)
+    return "fast" if days < 3.0 else "medium" if days < 5.0 else "slow"
 ```
 
 `q=0.75` gives the dip enough room that ~¾ of historical recoveries would have completed —
