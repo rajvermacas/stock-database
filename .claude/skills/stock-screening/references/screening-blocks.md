@@ -204,7 +204,7 @@ def bars_per_day(df):
     per = df.group_by(pl.col("trade_timestamp").dt.date()).len()["len"]
     return max(1.0, float(per.median()))
 
-def learn_horizon(df, events, q=0.75, h_max_days=6.0, h_min_days=0.5, min_recovered=5):
+def learn_horizon(df, events, q=0.75, h_max_days=10.0, h_min_days=0.5, min_recovered=5):
     """Pass 1 — per-stock recovery horizon from UNCAPPED bars-to-new-high (stop ignored).
     H_stock = clamp(ceil(P75 of recovery latency)), expressed via trading-day bounds."""
     bpd = bars_per_day(df)
