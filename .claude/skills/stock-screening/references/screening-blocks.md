@@ -228,8 +228,8 @@ def learn_horizon(df, events, q=0.75, h_max_days=6.0, h_min_days=0.5, min_recove
 
 def recovery_class(H_stock, bpd):
     days = H_stock / bpd
-    # trading-day buckets: <3d fast, 3d-<1wk medium, >=1wk slow (1 week = 5 trading days)
-    return "fast" if days < 3.0 else "medium" if days < 5.0 else "slow"
+    # trading-day buckets: <=3d fast, <=1wk medium, >1wk slow (1 week = 5 trading days)
+    return "fast" if days <= 3.0 else "medium" if days <= 5.0 else "slow"
 ```
 
 `q=0.75` gives the dip enough room that ~¾ of historical recoveries would have completed —
