@@ -45,11 +45,17 @@ wrong — every stock's nature differs.
 2. `fractal_flags` → `zigzag` (Blocks 2–3); pick `k` from the stock's choppiness.
 3. `pullback_events` (Block 4): keep HL-holding dips; reversals are logged failures.
 4. For each event: `anchor_for_low` (5) + `outcome` (6).
-5. `signature` (7): the stock's own depth band, dominant anchor, success rate.
-6. `current_state` (8) — it runs `live_pullback_low` (8b) internally. Read the label
-   AND both invalidation levels: `near_term_invalidation` (the live higher-low) is
-   the stop you quote; `structural_floor` is the deeper full-trend-break level. Also
-   check `live_low_depth`: a dip may have tagged the band and bounced already.
+5. `signature` (7): the stock's own depth band, dominant anchor, success rate. Then
+   `learn_turn_trigger` (7b): the stock's learned rebound trigger (`learned_lift` in its own
+   ATR, `learned_reclaim_ema`, `learned_turn_lag`) from its winning dips.
+6. `current_state` (8) — pass `trigger=` so it runs `live_turn` (8c) internally. Read the
+   label: `buy-the-dip-turned` (turned — a buy), `wait-not-turned` (in band, no turn yet —
+   the falling-knife hold), `buyable-dip-now/turn-unconfirmable` (trigger unlearnable —
+   low-confidence), plus the older `pullback-coming/wait` / `no-match`. Read both
+   invalidation levels: `near_term_invalidation` (the live higher-low) is the stop you quote;
+   `structural_floor` is the deeper full-trend-break level. Also read `turn`: `path` (which of
+   lift/reclaim fired), `cur_lift` vs `learned_lift`, and `trigger_lift_price` /
+   `trigger_ema_price` (the buy trigger to quote when not yet turned).
 7. Decide whether to **zoom in** (see "When to zoom in"): if the call turns on the
    exact swing low / stop or the anchor frame is too thin, drop one frame finer
    (fetching it if needed) and fold the sharper low/stop into the report.
@@ -119,10 +125,10 @@ live in a small footer for anyone who wants to check.
 Required shape (single symbol):
 
 ```
-**<SYMBOL> — <timeframe> → <BUY THE DIP | WAIT | AVOID>. <one-line reason>.**
+**<SYMBOL> — <timeframe> → <BUY THE DIP | WAIT (not turned) | AVOID>. <one-line reason>.**
 
-<1–3 plain sentences: where price is vs its recent high, and whether a dip is
-actually happening right now.>
+<1–3 plain sentences: where price is vs its recent high, whether a dip is actually happening,
+and — the key addition — whether the dip has shown this stock's own sign of a turn yet.>
 
 **How this stock usually dips:** when it pulls back it normally drops about <X–Y%>
 before trying to bounce, and it recovers about <half / two-thirds / N in 10> of the
@@ -130,6 +136,12 @@ time — so call the reliability <weak / fair / strong> in plain words.
 
 **What to watch for / what to do:** <the buy zone in ₹, or "it's in the zone now">,
 and one line on conviction (size small if reliability is weak).
+
+**Turn check (the knife gate):** only call BUY THE DIP when the dip has reproduced this
+stock's learned turn — lifted to about its usual ATR-bounce off the low, or genuinely
+reclaimed the EMA its rebounds reclaim. If it has not turned yet, say **WAIT (not turned)**
+and quote the **buy trigger** in ₹ ("turns on a close above ₹<trigger_ema_price>, or a lift
+to ₹<trigger_lift_price>"). A dip still making fresh lows is a falling knife — never a buy.
 
 **Where you'd be wrong:** close below **₹<live higher-low> (−X% from price)** breaks
 this pullback (near-term stop). The deeper floor is **₹<prior confirmed higher-low>
@@ -178,6 +190,12 @@ live low sits below the floor → near-term structure already cracked; flag it.
   no fabricated numbers.
 - `n_events < 5` → label **insufficient-history, low-confidence**; never invent a
   signature from 1–2 events.
+- **The turn is learned, never assumed.** Learn the rebound trigger per stock from its own
+  winning dips (Block 7b) and confirm it live (Block 8c); a dip is BUY only once it
+  reproduces that trigger (lift in the stock's own ATR **or** a genuine reclaim of its learned
+  EMA — union). A live dip still printing fresh lows (no lift, no genuine reclaim) is
+  `wait-not-turned`, the falling-knife hold, never a buy. `< 5` winning dips with an up-thrust
+  → `turn-unconfirmable, low-confidence`; never invent a lift or an EMA.
 - **Never quote invalidation off confirmed pivots alone.** The latest swing is
   unconfirmable at the chart edge (`center=True` nulls the last `k` bars), so the
   forming higher-low is invisible to the confirmed list. Recover it with
