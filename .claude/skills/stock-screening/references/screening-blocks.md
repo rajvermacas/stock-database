@@ -6,7 +6,7 @@ Stage A is deliberately inclusion-biased — a borderline keep is fine (Stage B 
 a wrong drop is not (Stage B never sees it).
 
 Run everything read-only from the repo root with `.venv/bin/python` via heredoc. Never
-write a scratch file into the repo.
+write a scratch file into the repo — the sole permitted write is the final report (Block A8).
 
 ## Block A1 — proxy net at one window W
 
@@ -239,3 +239,90 @@ report `bounce@learned` beside the fixed-yardstick `bounce@base` (`H_base = 15`)
 gap `Δ`: a large `Δ` on a `slow` stock is borrowed time, not a fast edge (Stage C tiers on
 this). `H_base` is the comparable ruler shared by every stock; `H_stock` is the per-stock
 verdict horizon.
+
+## Block A8 — write the report to a markdown file (Stage C; the only permitted write)
+
+The chat answer and a durable markdown file are the two renderings of the SAME per-symbol
+results. Build `rows` once (the dicts behind the chat box-table), reuse the ranked one-liners
+already printed for the chat picks as `buy_lines`, then call `write_report(...)`. Table-first
+layout: heading, the full GFM table, a reused `## Buy lines` block, a disclosures line.
+
+Every value here is supplied by the caller — there are NO defaults. A missing key raises
+`KeyError` (fail fast). The numbers must be the SAME already-rounded values shown in chat
+(this is a pure renderer, not a recomputation). Each `row` dict carries:
+`symbol, tier, n, band_lo, band_hi, now_off_high, live_low_dip, bounce_base, bounce_learned,
+delta, H_stock, trading_days, clamped, h_base, recovery_class, vol_fade_ratio, fading,
+live_low_price, live_low_pct, floor_price, floor_pct, is_index, caution`.
+
+```python
+import datetime, pathlib
+from collections import Counter
+
+COLS = ["Symbol", "tier", "n", "usual dip%", "now off hi%", "live-lo dip%", "b@base",
+        "b@learn (Δ)", "H≈days", "class", "vol-fade", "live low ₹ (−%)", "floor ₹ (−%)"]
+
+def _cell_symbol(r):
+    return r["symbol"] + (" [IDX]" if r["is_index"] else "") + (" ⚠" if r["caution"] else "")
+
+def _cell_h(r):
+    if r["H_stock"] is None:
+        return f"—(base {r['h_base']})"
+    return f"{r['H_stock']}≈{r['trading_days']}d" + ("!" if r["clamped"] else "")
+
+def _cell_vol(r):
+    if r["vol_fade_ratio"] is None:
+        return "n/a"
+    return f"{r['vol_fade_ratio']}" + ("✓" if r["fading"] else "")
+
+def _md_row(r):
+    cells = [
+        _cell_symbol(r), r["tier"], f"{r['n']}", f"{r['band_lo']}–{r['band_hi']}",
+        f"{r['now_off_high']}", f"{r['live_low_dip']}", f"{r['bounce_base']}",
+        f"{r['bounce_learned']} ({r['delta']:+})", _cell_h(r), f"{r['recovery_class']}",
+        _cell_vol(r), f"{r['live_low_price']} ({r['live_low_pct']}%)",
+        f"{r['floor_price']} ({r['floor_pct']}%)"]
+    return "| " + " | ".join(cells) + " |"
+
+def _md_table(rows):
+    head = "| " + " | ".join(COLS) + " |"
+    sep = "|" + "|".join(["---"] * len(COLS)) + "|"
+    return "\n".join([head, sep] + [_md_row(r) for r in rows])
+
+def _count_line(rows, n_shortlisted):
+    c = Counter(r["tier"] for r in rows)
+    order = ["BUY", "PATIENT", "SPEC", "WATCH", "CAUTION", "AVOID"]
+    parts = [f"{c[t]} {t}" for t in order if c[t]]
+    return f"{' · '.join(parts)} — from {n_shortlisted} shortlisted, {len(rows)} analyzed"
+
+def _disclosure_line(d):
+    return (f"_Disclosures: W {d['mode']}, overlap {d['overlap']}, W={d['W_used']}; "
+            f"bars/day={d['bars_per_day']}; H_base={d['h_base']}, clamp {d['clamp_days']}; "
+            f"{d['excluded_short_history']} excluded short-history; "
+            f"survivorship (universe = today's uptrend); EMA/ATR computed on the fly._")
+
+def _render_md(rows, buy_lines, disclosures, interval, human):
+    head = f"# Pullback Screen — {human} ({interval})"
+    if not rows:
+        return "\n\n".join([head, "No buyable dips today.", _disclosure_line(disclosures)]) + "\n"
+    buy = "## Buy lines\n" + ("\n".join(buy_lines) if buy_lines else "_No buy-tier candidates._")
+    parts = [head, _count_line(rows, disclosures["n_shortlisted"]),
+             _md_table(rows), buy, _disclosure_line(disclosures)]
+    return "\n\n".join(parts) + "\n"
+
+def write_report(rows, buy_lines, disclosures, interval, outdir="output"):
+    """Write the screen report as a table-first markdown file; return the Path.
+    rows / buy_lines / disclosures: the SAME data rendered to chat (no recomputation)."""
+    now = datetime.datetime.now()                               # run-clock label, not frozen
+    stamp, human = now.strftime("%y-%m-%d-%H%M"), now.strftime("%Y-%m-%d %H:%M")
+    pathlib.Path(outdir).mkdir(parents=True, exist_ok=True)     # idempotent ensure, not a fallback
+    path = pathlib.Path(outdir) / f"{stamp}-{interval}.md"
+    path.write_text(_render_md(rows, buy_lines, disclosures, interval, human), encoding="utf-8")
+    print(f"report written: {path}")                            # skill idiom = print, not logger
+    return path
+```
+
+`mkdir(exist_ok=True)` only ensures `output/` exists; a permission/IO error on `write_text`
+propagates and aborts (fail fast — no swallow, no silent skip). `rows=[]` (empty shortlist)
+still writes a file: heading + "No buyable dips today." + disclosures. The disclosures dict
+MUST carry every key used in `_disclosure_line` plus `n_shortlisted` — render-ready scalars,
+matching exactly what the run discloses in chat.

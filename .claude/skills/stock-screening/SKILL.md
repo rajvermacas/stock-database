@@ -38,7 +38,8 @@ running. Read-only against `market-data/`.
    A7). Fixed risk knob: `stop_pct=0.03` (the only frozen risk parameter). The horizon is
    learned (`H_stock`); every event is scored at **both** `H_base=15` (comparable
    yardstick) and `H_stock` (own clock) — see the comparability clause in "The law".
-3. **Stage C — tier + report.** Tier the confirmed candidates and write the report.
+3. **Stage C — tier + report.** Tier the confirmed candidates, present the report in chat
+   (lead + table), then write the full report to a markdown file under `output/` (Block A8).
 
 ## Stage A — proxy net (see references/screening-blocks.md)
 
@@ -88,6 +89,13 @@ high; those are not dip-buys.
 Do not dump every BUY-eligible name — rank by conviction and lead with the top handful;
 state how many more cleared the bar (no silent truncation).
 
+**Persist the report.** After presenting in chat, write the markdown file with Block A8
+(`write_report(rows, buy_lines, disclosures, interval)`): `output/<YY-MM-DD-HHMM>-<interval>.md`
+— the timestamp from the run clock, `interval` the user's timeframe. `rows` are the same
+per-symbol dicts behind the chat table; `buy_lines` the same ranked one-liners shown for the
+picks (no recomputation). Report the written path. **Write the file even when the shortlist is
+empty** (heading + "no buyable dips today." + disclosures).
+
 ## Output style
 
 **Ranked line (one per buy candidate):**
@@ -121,6 +129,15 @@ and the clamp range used; `bars_per_day` (derived from the data, not hardcoded);
 excluded for short history; survivorship bias (universe selected on today's uptrend);
 EMAs/ATR computed on the fly.
 
+**Markdown report file (every run):** table-first, written to
+`output/<YY-MM-DD-HHMM>-<interval>.md` (Block A8). Layout: `# Pullback Screen — <date time>
+(<interval>)`; a one-line tier count (`… — from N shortlisted, M analyzed`); the **full footer
+table as a GitHub-flavored markdown table** (same columns and `⚠`/`[IDX]` markers as the chat
+footer, each two-line box cell flattened to one line — e.g. `460.0 (−0.86%)`, `0.733 (−0.067)`,
+`7≈1.0d`); a `## Buy lines` block reusing the ranked one-liners for the BUY/PATIENT/SPECULATIVE
+picks; then a closing `_Disclosures: …_` line carrying the same disclosures above. **Chat
+output is unchanged** — the file is an added durable copy, not a replacement.
+
 **Empty shortlist → report plainly "no buyable dips today."** Never force picks, never
 fall back to closest-to-band names.
 
@@ -150,10 +167,12 @@ Structural evidence, not financial advice.
 
 ## Hard rules
 
-- **Never write a file into the repository.** Run composed Polars by piping a heredoc to
-  `.venv/bin/python` (`.venv/bin/python - <<'PY' ... PY`). If a throwaway script is
-  genuinely unavoidable, put it under `/tmp/` only. The only artifact is the reported
-  answer.
+- **The only file you may write into the repo is the final screen report** — one markdown
+  file under `output/` (Stage C / Block A8). Write nothing else into the repo: no scratch
+  `.py`, notebooks, or intermediate files. Run composed Polars by piping a heredoc to
+  `.venv/bin/python` (`.venv/bin/python - <<'PY' ... PY`); if a throwaway script is genuinely
+  unavoidable, put it under `/tmp/` only. The report markdown + the chat answer are the only
+  artifacts.
 - **Never delete or overwrite anything under `market-data/prices/`** — persistent data
   lake; only add (fetched intervals) to it.
 - **Do not modify `pullback-finder`.** Compose its blocks by pasting them into the same
@@ -168,7 +187,8 @@ Structural evidence, not financial advice.
 | No timeframe given | Ask; never default. |
 | Requested interval not on disk | Fetch via pipeline (respect Yahoo caps); fail fast on a failed download. |
 | Symbol file missing / empty | Quote the error, skip that symbol, disclose. |
-| Shortlist empty | Report "no buyable dips today." No forced picks. |
+| Shortlist empty | Report "no buyable dips today" in chat **and** still write the file (heading + that line + disclosures). No forced picks. |
+| `output/` not writable | Fail fast; quote the OS error. No silent skip — the report is a required artifact. |
 | Survivor with < 5 past dips | Label low-confidence; do not invent a signature. |
 | < 5 events ever recover | Cannot learn `H_stock`; fall back to `H_base`, mark low-confidence. |
 | `H_stock` hit the clamp | Disclose "clamped" — true recovery latency exceeds the cap (very slow grinder). |
