@@ -35,7 +35,9 @@ running. Read-only against `market-data/`.
    compose `pullback-finder`'s Blocks 1–8 with per-stock `k` (`choppiness_k`, Block A3),
    the up-leg guard (`upleg_is_uptrend`, Block A5), the volume-fade annotation
    (`volume_fade`, Block A4), and the per-stock learned horizon (`learn_horizon`, Block
-   A7). Fixed risk knob: `stop_pct=0.03` (the only frozen risk parameter). The horizon is
+   A7). Also learn the per-stock rebound trigger (`learn_turn_trigger`, Block 7b) and confirm
+   it on the live dip (`live_turn`, Block 8c) — the falling-knife gate. Fixed risk knob:
+   `stop_pct=0.03` (the only frozen risk parameter). The horizon is
    learned (`H_stock`); every event is scored at **both** `H_base=15` (comparable
    yardstick) and `H_stock` (own clock) — see the comparability clause in "The law".
 3. **Stage C — tier + report.** Tier the confirmed candidates, present the report in chat
@@ -59,7 +61,10 @@ rising 50-EMA, a volume-fade flag on the live dip, and a learned recovery horizo
 gap `Δ`), recovery class (fast/medium/slow), dominant anchor, live low (near-term stop) +
 structural floor, each stop with its **% distance from the latest close**. `n_events < 5`
 → low-confidence; never invent a signature. Fewer than 5 events that ever recover → cannot
-learn the horizon: fall back to `H_base` and label low-confidence.
+learn the horizon: fall back to `H_base` and label low-confidence. Stage B also learns each
+survivor's **rebound trigger** from its own winning dips (lift in its ATR + the EMA its
+rebounds reclaim) and checks whether the live dip has reproduced it — `turn confirmed`
+True/False/None. A BUY requires `True`.
 
 ## Stage C — tier + report
 
@@ -68,11 +73,17 @@ inclusion-biased and catches names that dipped recently but have since recovered
 high; those are not dip-buys.
 
 - **BUY THE DIP** — price is *still in the dip now* (`now off high` is positive and inside
-  the stock's own band), uptrend intact, live low above floor, and `bounce@base` fair or
-  better (≈ 0.5+). Rank by `bounce@base` first (the comparable rate), then prefer
-  `fast`/`medium` recovery and a small `Δ`; a fading-volume dip and deepest-in-band break
-  ties. Lead with the few highest-conviction names, not the whole list. Quote each pick's
-  recovery class and expected hold ("resumes in ~D trading days") in plain words.
+  the stock's own band), uptrend intact, live low above floor, `bounce@base` fair or better
+  (≈ 0.5+), **and the turn is confirmed** (`state["turn"]["confirmed"] is True` — the live dip
+  lifted to its learned ATR-bounce or genuinely reclaimed its learned EMA). Rank by
+  `bounce@base` first, then prefer `fast`/`medium` recovery and a small `Δ`; a fading-volume
+  dip and deepest-in-band break ties. Lead with the few highest-conviction names. Quote each
+  pick's recovery class, expected hold, and **which turn path fired** (lift / reclaim).
+- **WAIT / not-turned** — cleared depth + uptrend + floor + bounce, **but the turn is not
+  confirmed** (`state["turn"]["confirmed"] is False`): in its own band yet still falling or
+  basing, no sign of a turn. This is the falling-knife gate — **never a buy now**. Report it
+  separately as the watchlist with its **buy trigger** ("turns on a close above ₹X, or a lift
+  to ₹Y") and re-screen next bar.
 - **PATIENT BUY** — qualifies as a BUY but `recovery_class` is `slow`: the edge is real
   yet needs a long hold. Report it **separately** with its expected hold time; never mix it
   in with quick setups.
@@ -81,7 +92,8 @@ high; those are not dip-buys.
   Note them; they are not buys now.
 - **SPECULATIVE** — qualifies but `n_events` thin (low-confidence), **or** `bounce@base`
   weak (< ~0.5), **or** *borrowed time* (`Δ ≥ 0.15` while `bounce@base < 0.5` — the rate
-  exists only because the long horizon manufactured it). Size small.
+  exists only because the long horizon manufactured it), **or** the turn trigger is unlearnable (`confirmed is None` — `< 5`
+  winning dips with an up-thrust; low-confidence). Size small.
 - **CAUTION** — live low has dropped below the prior higher-low (near-term structure
   cracked, floor % < live-low %).
 - **AVOID** — recent dip far beyond its own band (reversal risk, not a routine dip).
@@ -102,15 +114,15 @@ empty** (heading + "no buyable dips today." + disclosures).
 
 ```
 SYMBOL — <action> (<recovery class>): dipping X% vs its usual Y% dip;
-bounces ~Z% @base / ~Z'% on its own ~D-day clock (Δ +d); buy zone ₹A–B,
-wrong below ₹C (−X% from price)
+bounces ~Z% @base / ~Z'% on its own ~D-day clock (Δ +d); turned via <path>;
+buy zone ₹A–B, wrong below ₹C (−X% from price)
 ```
 
 **Footer table, one row per analyzed stock, columns:**
 
 ```
 Symbol | n dips | usual dip % | now off high % | live-low dip % |
-bounce@base | bounce@learned (Δ) | H_stock (≈D days) | recovery class |
+bounce@base | bounce@learned (Δ) | H_stock (≈D days) | recovery class | turn |
 vol-fade | live high ₹ (+%) | live low ₹ (−%) | floor ₹ (−%)
 ```
 
@@ -126,11 +138,17 @@ dip/up-leg volume ratio (✓ if < 1 = volume fading = healthy). `bounce@base` is
 comparable rate at the fixed `H_base` yardstick; `bounce@learned` is the rate at the
 stock's own `H_stock`; `Δ = learned − base` flags borrowed time when large.
 
+`turn` shows the knife gate: `✓(path)` when confirmed (which of lift/reclaim fired), `— ₹X`
+when not turned (the nearer buy-trigger price to reclaim), `n/a` when unlearnable. A BUY
+always shows `✓`; a `—` row is WAIT, not a buy.
+
 **Disclosures every run:** the W `mode` (stable/sensitive) + `overlap` + `W_used`;
 computed `k` per stock; per stock `H_stock` (bars and ≈ trading days), its recovery class,
 median & P75 recovery latency, and whether `H_stock` was clamped; the `H_base` yardstick
 and the clamp range used; `bars_per_day` (derived from the data, not hardcoded); count
-excluded for short history; survivorship bias (universe selected on today's uptrend);
+excluded for short history; survivorship bias (universe selected on today's uptrend); per
+stock the learned rebound trigger (`learned_lift` in ATR, `learned_reclaim_ema`,
+`learned_turn_lag`) and how many winning dips it was learned from (or "turn-unconfirmable");
 EMAs/ATR computed on the fly.
 
 **Markdown report file (every run):** table-first, written to
@@ -152,8 +170,9 @@ Structural evidence, not financial advice.
 
 ## The law — no frozen pattern constants
 
-> Every **pattern** parameter (W, k, noise filter, depth bands, **and the recovery horizon
-> `H_stock`**) is derived from or validated against the current data **at screen time** and
+> Every **pattern** parameter (W, k, noise filter, depth bands, the recovery horizon
+> `H_stock`, **and the rebound trigger — `learned_lift`, `learned_reclaim_ema`,
+> `learned_turn_lag`**) is derived from or validated against the current data **at screen time** and
 > disclosed in the output. None is a hardcoded constant trusted across runs, because the
 > universe and each stock's behavior drift.
 >
@@ -198,5 +217,7 @@ Structural evidence, not financial advice.
 | `H_stock` hit the clamp | Disclose "clamped" — true recovery latency exceeds the cap (very slow grinder). |
 | Borrowed time (`Δ ≥ 0.15` and `bounce@base < 0.5`) | Demote to SPECULATIVE; never lead BUY. |
 | W-sensitive run (overlap < 0.85) | Use the union shortlist; disclose mode + overlap. |
+| Turn trigger unlearnable (< 5 winning dips with an up-thrust) | `turn = unconfirmable`; demote to SPECULATIVE/low-confidence; never invent a lift or EMA. |
+| Live dip still at a fresh low (no lift, no genuine reclaim) | `wait-not-turned` → WAIT tier, never BUY (the knife gate). |
 
 This is structural evidence, not financial advice.
