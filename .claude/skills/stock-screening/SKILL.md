@@ -111,13 +111,17 @@ wrong below ₹C (−X% from price)
 ```
 Symbol | n dips | usual dip % | now off high % | live-low dip % |
 bounce@base | bounce@learned (Δ) | H_stock (≈D days) | recovery class |
-vol-fade | live low ₹ (−%) | floor ₹ (−%)
+vol-fade | live high ₹ (+%) | live low ₹ (−%) | floor ₹ (−%)
 ```
 
 Mark a row ⚠ when the floor's % is smaller than the live low's % (live low below the
 floor → near-term structure cracked). `dip %`, `now off high %`, and `live-low dip %` are
-measured from the swing HIGH (depth); each `(−%)` beside a ₹ stop is measured from the
-latest CLOSE (stop distance) — same low, two reference points. `vol-fade` shows the
+measured from the swing HIGH (depth); each `(−%)`/`(+%)` beside a ₹ level is measured from
+the latest CLOSE (distance from price). `live high ₹` is the swing high the dip fell from —
+the same high the depth %s use (depth-from-high vs distance-from-close: one high, two
+reference points); its `(+%)` is the upside to reclaim it. `live low ₹` (−%) is the
+near-term stop and `floor ₹` (−%) the structural floor — same low/floor, two reference
+points. `vol-fade` shows the
 dip/up-leg volume ratio (✓ if < 1 = volume fading = healthy). `bounce@base` is the
 comparable rate at the fixed `H_base` yardstick; `bounce@learned` is the rate at the
 stock's own `H_stock`; `Δ = learned − base` flags borrowed time when large.
@@ -133,8 +137,8 @@ EMAs/ATR computed on the fly.
 `output/<YY-MM-DD-HHMM>-<interval>.md` (Block A8). Layout: `# Pullback Screen — <date time>
 (<interval>)`; a one-line tier count (`… — from N shortlisted, M analyzed`); the **full footer
 table as a GitHub-flavored markdown table** (same columns and `⚠`/`[IDX]` markers as the chat
-footer, each two-line box cell flattened to one line — e.g. `460.0 (−0.86%)`, `0.733 (−0.067)`,
-`7≈1.0d`); a `## Buy lines` block reusing the ranked one-liners for the BUY/PATIENT/SPECULATIVE
+footer, each two-line box cell flattened to one line — e.g. `503.9 (+8.6%)`, `460.0 (−0.86%)`,
+`0.733 (−0.067)`, `7≈1.0d`); a `## Buy lines` block reusing the ranked one-liners for the BUY/PATIENT/SPECULATIVE
 picks; then a closing `_Disclosures: …_` line carrying the same disclosures above. **Chat
 output is unchanged** — the file is an added durable copy, not a replacement.
 

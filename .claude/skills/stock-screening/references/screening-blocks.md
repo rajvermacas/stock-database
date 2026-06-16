@@ -179,8 +179,12 @@ repo, paste them into the same heredoc — with these screening additions:
    — annotation only. For the live (unconfirmed) dip, `leg_start_ts` = the last confirmed
    low before the last confirmed high; `high_ts` = the last confirmed high; `live_low_ts`
    = the live low's timestamp from `live_pullback_low`.
-9. Compute each stop's % from the latest close: `(close - level) / close * 100` for
-   `near_term_invalidation` and `structural_floor`.
+9. Compute each level's % from the latest close: `(close - level) / close * 100` for
+   `near_term_invalidation` and `structural_floor` (both below close → shown under `(−%)`).
+   Also read the swing high `live_high_price = last_high[2]` (the last confirmed `"H"` in
+   `zz`; `None` if there is no confirmed high) and `live_high_pct = (live_high_price -
+   close) / close * 100` — normally positive (high above close, the level to reclaim), shown
+   under `(+%)`.
 
 `n_events < 5` for a symbol → label it low-confidence; never invent a signature.
 This is the SAME math pullback-finder uses for a single symbol — Stage B is that workflow
@@ -252,14 +256,16 @@ Every value here is supplied by the caller — there are NO defaults. A missing 
 (this is a pure renderer, not a recomputation). Each `row` dict carries:
 `symbol, tier, n, band_lo, band_hi, now_off_high, live_low_dip, bounce_base, bounce_learned,
 delta, H_stock, trading_days, clamped, h_base, recovery_class, vol_fade_ratio, fading,
-live_low_price, live_low_pct, floor_price, floor_pct, is_index, caution`.
+live_low_price, live_low_pct, floor_price, floor_pct, live_high_price, live_high_pct,
+is_index, caution`.
 
 ```python
 import datetime, pathlib
 from collections import Counter
 
 COLS = ["Symbol", "tier", "n", "usual dip%", "now off hi%", "live-lo dip%", "b@base",
-        "b@learn (Δ)", "H≈days", "class", "vol-fade", "live low ₹ (−%)", "floor ₹ (−%)"]
+        "b@learn (Δ)", "H≈days", "class", "vol-fade", "live high ₹ (+%)",
+        "live low ₹ (−%)", "floor ₹ (−%)"]
 
 def _cell_symbol(r):
     return r["symbol"] + (" [IDX]" if r["is_index"] else "") + (" ⚠" if r["caution"] else "")
@@ -274,12 +280,18 @@ def _cell_vol(r):
         return "n/a"
     return f"{r['vol_fade_ratio']}" + ("✓" if r["fading"] else "")
 
+def _cell_high(r):
+    if r["live_high_price"] is None:
+        return "n/a"                                # no confirmed swing high yet
+    return f"{r['live_high_price']} ({r['live_high_pct']}%)"
+
 def _md_row(r):
     cells = [
         _cell_symbol(r), r["tier"], f"{r['n']}", f"{r['band_lo']}–{r['band_hi']}",
         f"{r['now_off_high']}", f"{r['live_low_dip']}", f"{r['bounce_base']}",
         f"{r['bounce_learned']} ({r['delta']:+})", _cell_h(r), f"{r['recovery_class']}",
-        _cell_vol(r), f"{r['live_low_price']} ({r['live_low_pct']}%)",
+        _cell_vol(r), _cell_high(r),
+        f"{r['live_low_price']} ({r['live_low_pct']}%)",
         f"{r['floor_price']} ({r['floor_pct']}%)"]
     return "| " + " | ".join(cells) + " |"
 
