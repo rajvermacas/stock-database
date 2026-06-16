@@ -173,8 +173,16 @@ repo, paste them into the same heredoc — with these screening additions:
    Aggregate to `bounce@base` and `bounce@learned`; record `Δ = bounce@learned −
    bounce@base`, plus `H["recovery_class"]` and `H_stock` in trading days. The signature's
    own-clock `success_rate` uses `success_learned`.
-7. `sig = signature(events)` (Block 7); `state = current_state(df, zz, sig)` (Block 8,
-   runs `live_pullback_low` internally).
+7. `sig = signature(events)` (Block 7). Learn the turn: `trigger = learn_turn_trigger(df,
+   events, success_key="success_base")` (Block 7b — learn from the comparable @base winners
+   tagged in step 6). Then `state = current_state(df, zz, sig, trigger=trigger)` (Block 8 —
+   runs `live_turn`, Block 8c, internally). Read `state["turn"]`: `confirmed` (True/False/
+   None), `path`, `cur_lift`, `learned_lift`, `reclaim_ema`, `trigger_lift_price`,
+   `trigger_ema_price`. **The knife gate:** a BUY requires `state["turn"]["confirmed"] is
+   True`; `False` → the WAIT/not-turned tier; `None` (unlearnable/warm-up/no live dip) →
+   low-confidence (SPECULATIVE). For a not-turned name, the **buy-trigger price** to quote =
+   the nearer reachable level: `min(p for p in [trigger_lift_price, trigger_ema_price] if p
+   is not None)`.
 8. `vf = volume_fade(df, leg_start_ts, high_ts, live_low_ts)` (Block A4) on the live dip
    — annotation only. For the live (unconfirmed) dip, `leg_start_ts` = the last confirmed
    low before the last confirmed high; `high_ts` = the last confirmed high; `live_low_ts`
@@ -257,14 +265,17 @@ Every value here is supplied by the caller — there are NO defaults. A missing 
 `symbol, tier, n, band_lo, band_hi, now_off_high, live_low_dip, bounce_base, bounce_learned,
 delta, H_stock, trading_days, clamped, h_base, recovery_class, vol_fade_ratio, fading,
 live_low_price, live_low_pct, floor_price, floor_pct, live_high_price, live_high_pct,
-is_index, caution`.
+is_index, caution, turn_confirmed, turn_path, buy_trigger_price`. `turn_confirmed` is
+True/False/None from `state["turn"]`; `turn_path` the fired path list; `buy_trigger_price`
+the nearer trigger ₹ for not-turned names, else `None`. The WAIT/not-turned tier sets
+`tier="WAIT"` (the short token used in `_count_line` and the `tier` column).
 
 ```python
 import datetime, pathlib
 from collections import Counter
 
 COLS = ["Symbol", "tier", "n", "usual dip%", "now off hi%", "live-lo dip%", "b@base",
-        "b@learn (Δ)", "H≈days", "class", "vol-fade", "live high ₹ (+%)",
+        "b@learn (Δ)", "H≈days", "class", "turn", "vol-fade", "live high ₹ (+%)",
         "live low ₹ (−%)", "floor ₹ (−%)"]
 
 def _cell_symbol(r):
@@ -280,6 +291,13 @@ def _cell_vol(r):
         return "n/a"
     return f"{r['vol_fade_ratio']}" + ("✓" if r["fading"] else "")
 
+def _cell_turn(r):
+    if r["turn_confirmed"] is None:
+        return "n/a"                                    # unlearnable / warm-up / no live dip
+    if r["turn_confirmed"]:
+        return "✓(" + ",".join(r["turn_path"]) + ")"    # which path(s) fired
+    return f"— ₹{r['buy_trigger_price']}" if r["buy_trigger_price"] is not None else "—"
+
 def _cell_high(r):
     if r["live_high_price"] is None:
         return "n/a"                                # no confirmed swing high yet
@@ -290,6 +308,7 @@ def _md_row(r):
         _cell_symbol(r), r["tier"], f"{r['n']}", f"{r['band_lo']}–{r['band_hi']}",
         f"{r['now_off_high']}", f"{r['live_low_dip']}", f"{r['bounce_base']}",
         f"{r['bounce_learned']} ({r['delta']:+})", _cell_h(r), f"{r['recovery_class']}",
+        _cell_turn(r),
         _cell_vol(r), _cell_high(r),
         f"{r['live_low_price']} ({r['live_low_pct']}%)",
         f"{r['floor_price']} ({r['floor_pct']}%)"]
@@ -302,7 +321,7 @@ def _md_table(rows):
 
 def _count_line(rows, n_shortlisted):
     c = Counter(r["tier"] for r in rows)
-    order = ["BUY", "PATIENT", "SPEC", "WATCH", "CAUTION", "AVOID"]
+    order = ["BUY", "PATIENT", "SPEC", "WAIT", "WATCH", "CAUTION", "AVOID"]
     parts = [f"{c[t]} {t}" for t in order if c[t]]
     return f"{' · '.join(parts)} — from {n_shortlisted} shortlisted, {len(rows)} analyzed"
 
