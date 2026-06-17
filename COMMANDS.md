@@ -32,7 +32,8 @@ Yahoo-provided volume is persisted unchanged.
 
 ```bash
 stock-data --help
-uv run stock-data --config config/stock-data-1h.toml update-all --help
+uv run stock-data --config config/stock-data-1h.toml update-all
+uv run stock-data --config config/stock-data-1d.toml update-all
 stock-data --config config/stock-data.toml update-symbol --help
 ```
 

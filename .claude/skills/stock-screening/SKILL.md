@@ -123,7 +123,7 @@ buy zone ₹A–B, wrong below ₹C (−X% from price)
 ```
 Symbol | n dips | usual dip % | now off high % | live-low dip % |
 bounce@base | bounce@learned (Δ) | H_stock (≈D days) | recovery class | turn |
-vol-fade | live high ₹ (+%) | live low ₹ (−%) | floor ₹ (−%)
+vol-fade | live high ₹ (+%) | live low ₹ (−%) | floor ₹ (−%) | latest candle
 ```
 
 Mark a row ⚠ when the floor's % is smaller than the live low's % (live low below the
@@ -142,6 +142,11 @@ stock's own `H_stock`; `Δ = learned − base` flags borrowed time when large.
 when not turned (the nearer buy-trigger price to reclaim), `n/a` when unlearnable. A BUY
 always shows `✓`; a `—` row is WAIT, not a buy.
 
+`latest candle` is the `trade_timestamp` of the most recent bar each stock was analyzed on
+(`YYYY-MM-DD HH:MM`, from `last["trade_timestamp"]`) — surfaced so the reader can fact-check
+that the screen ran on fresh data and which candle every number was computed on. Intraday
+intervals show the bar time; daily+ show `00:00`.
+
 **Disclosures every run:** the W `mode` (stable/sensitive) + `overlap` + `W_used`;
 computed `k` per stock; per stock `H_stock` (bars and ≈ trading days), its recovery class,
 median & P75 recovery latency, and whether `H_stock` was clamped; the `H_base` yardstick
@@ -155,7 +160,8 @@ EMAs/ATR computed on the fly.
 `output/<YY-MM-DD-HHMM>-<interval>.md` (Block A8). Layout: `# Pullback Screen — <date time>
 (<interval>)`; a one-line tier count (`… — from N shortlisted, M analyzed`); the **full footer
 table as a GitHub-flavored markdown table** (same columns and `⚠`/`[IDX]` markers as the chat
-footer, each two-line box cell flattened to one line — e.g. `503.9 (+8.6%)`, `460.0 (−0.86%)`,
+footer, including the trailing `latest candle` column — e.g. `2026-06-16 14:14`; each two-line
+box cell flattened to one line — e.g. `503.9 (+8.6%)`, `460.0 (−0.86%)`,
 `0.733 (−0.067)`, `7≈1.0d`); a `## Buy lines` block reusing the ranked one-liners for the BUY/PATIENT/SPECULATIVE
 picks; then a closing `_Disclosures: …_` line carrying the same disclosures above. **Chat
 output is unchanged** — the file is an added durable copy, not a replacement.

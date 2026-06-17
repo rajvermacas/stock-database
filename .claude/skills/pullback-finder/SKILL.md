@@ -71,11 +71,13 @@ wrong — every stock's nature differs.
    buy zone ₹A–B, wrong below ₹C (−X% from price)`. Put the raw numbers table in
    the details footer, one row per analyzed stock, columns:
    `Symbol | n dips | usual dip % | now off high % | live-low dip % | bounce rate |
-   live low ₹ (−%) | floor ₹ (−%)`. Mark a row ⚠ when the floor's % is smaller than
-   the live low's % (live low sits below the floor → near-term structure cracked).
-   (`dip %`, `now off high %` and `live-low dip %` are measured from the swing HIGH =
-   pullback depth; the `(−%)` beside each ₹ stop is measured from the latest CLOSE =
-   stop distance — same low, two reference points.)
+   live low ₹ (−%) | floor ₹ (−%) | latest candle`. Mark a row ⚠ when the floor's % is
+   smaller than the live low's % (live low sits below the floor → near-term structure
+   cracked). (`dip %`, `now off high %` and `live-low dip %` are measured from the swing
+   HIGH = pullback depth; the `(−%)` beside each ₹ stop is measured from the latest CLOSE =
+   stop distance — same low, two reference points.) `latest candle` is the
+   `trade_timestamp` of the most recent bar each stock was analyzed on (`YYYY-MM-DD HH:MM`,
+   from `last["trade_timestamp"]`) — surfaced to fact-check which candle the row used.
 
 ## When to zoom in (multi-timeframe intelligence)
 
@@ -154,8 +156,9 @@ finer frame revealed, noted as a different, shorter-history frame.>
 ---
 *Details: <n> past dips found · usual depth <X–Y%> · bounce rate <0.NN> · usual
 anchor <ema_NN or "no clean EMA — structural"> · stops: near-term ₹<live HL> (−X%),
-floor ₹<prior HL> (−Y%). Computed on <timeframe> data; EMAs derived on the fly.
-Structural evidence, not financial advice.*
+floor ₹<prior HL> (−Y%). Computed on <timeframe> data, as of <YYYY-MM-DD HH:MM>
+(latest candle, `last["trade_timestamp"]` — fact-check the bar used); EMAs derived on
+the fly. Structural evidence, not financial advice.*
 ```
 
 Translate every term: depth band → "usually dips X–Y%"; success_rate → "bounces N%

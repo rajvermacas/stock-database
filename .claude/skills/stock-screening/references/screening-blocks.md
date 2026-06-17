@@ -265,7 +265,11 @@ Every value here is supplied by the caller — there are NO defaults. A missing 
 `symbol, tier, n, band_lo, band_hi, now_off_high, live_low_dip, bounce_base, bounce_learned,
 delta, H_stock, trading_days, clamped, h_base, recovery_class, vol_fade_ratio, fading,
 live_low_price, live_low_pct, floor_price, floor_pct, live_high_price, live_high_pct,
-is_index, caution, turn_confirmed, turn_path, buy_trigger_price`. `turn_confirmed` is
+is_index, caution, turn_confirmed, turn_path, buy_trigger_price, latest_timestamp`.
+`latest_timestamp` is the `trade_timestamp` of the most recent bar the stock was analyzed
+on (`last["trade_timestamp"]` from the loaded df) — a Python `datetime` (or pre-formatted
+string), surfaced so the reader can fact-check which candle the row was computed on.
+`turn_confirmed` is
 True/False/None from `state["turn"]`; `turn_path` the fired path list; `buy_trigger_price`
 the nearer trigger ₹ for not-turned names, else `None`. The WAIT/not-turned tier sets
 `tier="WAIT"` (the short token used in `_count_line` and the `tier` column).
@@ -276,7 +280,7 @@ from collections import Counter
 
 COLS = ["Symbol", "tier", "n", "usual dip%", "now off hi%", "live-lo dip%", "b@base",
         "b@learn (Δ)", "H≈days", "class", "turn", "vol-fade", "live high ₹ (+%)",
-        "live low ₹ (−%)", "floor ₹ (−%)"]
+        "live low ₹ (−%)", "floor ₹ (−%)", "latest candle"]
 
 def _cell_symbol(r):
     return r["symbol"] + (" [IDX]" if r["is_index"] else "") + (" ⚠" if r["caution"] else "")
@@ -303,6 +307,10 @@ def _cell_high(r):
         return "n/a"                                # no confirmed swing high yet
     return f"{r['live_high_price']} ({r['live_high_pct']}%)"
 
+def _cell_ts(r):
+    ts = r["latest_timestamp"]                       # last["trade_timestamp"]; fail-fast on missing
+    return ts if isinstance(ts, str) else ts.strftime("%Y-%m-%d %H:%M")
+
 def _md_row(r):
     cells = [
         _cell_symbol(r), r["tier"], f"{r['n']}", f"{r['band_lo']}–{r['band_hi']}",
@@ -311,7 +319,7 @@ def _md_row(r):
         _cell_turn(r),
         _cell_vol(r), _cell_high(r),
         f"{r['live_low_price']} ({r['live_low_pct']}%)",
-        f"{r['floor_price']} ({r['floor_pct']}%)"]
+        f"{r['floor_price']} ({r['floor_pct']}%)", _cell_ts(r)]
     return "| " + " | ".join(cells) + " |"
 
 def _md_table(rows):
