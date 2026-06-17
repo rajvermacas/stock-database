@@ -5,7 +5,14 @@ from datetime import date
 from pathlib import Path
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from stock_data.intervals import get_interval
 
@@ -37,6 +44,16 @@ class PathsConfig(StrictModel):
 
 class DownloadConfig(StrictModel):
     initial_start_date: date
+    end_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_end_date(self) -> Self:
+        if self.end_date is not None and self.end_date < self.initial_start_date:
+            raise ValueError(
+                f"end_date {self.end_date} is before "
+                f"initial_start_date {self.initial_start_date}"
+            )
+        return self
 
 
 class YahooConfig(StrictModel):

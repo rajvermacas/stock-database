@@ -333,6 +333,26 @@ def _count_line(rows, n_shortlisted):
     parts = [f"{c[t]} {t}" for t in order if c[t]]
     return f"{' · '.join(parts)} — from {n_shortlisted} shortlisted, {len(rows)} analyzed"
 
+# one-line meaning per tier token — the Stage-C definitions, condensed (the report is
+# self-documenting). Keys are the SHORT tokens used in the table / _count_line.
+TIER_MEANINGS = {
+    "BUY": "still in its own dip **and** turn confirmed — a dip-buy now.",
+    "PATIENT": "qualifies as BUY but recovery is slow — real edge, long hold.",
+    "SPEC": "turned but thin edge / few events / borrowed time — size small.",
+    "WAIT": "in band + uptrend but **not turned yet** (falling-knife gate) — buy only on its trigger.",
+    "WATCH": "already bounced or too shallow (now off high ≤ 0) — not a buy now.",
+    "CAUTION": "live low has dropped below the structural floor — near-term structure cracked.",
+    "AVOID": "recent dip far beyond its own band — reversal risk, not a routine dip.",
+}
+
+def _tier_legend(rows):
+    """Legend for ONLY the tiers present in this run (count-line order). '' if no rows."""
+    order = ["BUY", "PATIENT", "SPEC", "WAIT", "WATCH", "CAUTION", "AVOID"]
+    present = [t for t in order if any(r["tier"] == t for r in rows)]
+    if not present:
+        return ""
+    return "## Tiers (this run)\n" + "\n".join(f"- **{t}** — {TIER_MEANINGS[t]}" for t in present)
+
 def _disclosure_line(d):
     return (f"_Disclosures: W {d['mode']}, overlap {d['overlap']}, W={d['W_used']}; "
             f"bars/day={d['bars_per_day']}; H_base={d['h_base']}, clamp {d['clamp_days']}; "
@@ -345,8 +365,8 @@ def _render_md(rows, buy_lines, disclosures, interval, human):
         return "\n\n".join([head, "No buyable dips today.", _disclosure_line(disclosures)]) + "\n"
     buy = "## Buy lines\n" + ("\n".join(buy_lines) if buy_lines else "_No buy-tier candidates._")
     parts = [head, _count_line(rows, disclosures["n_shortlisted"]),
-             _md_table(rows), buy, _disclosure_line(disclosures)]
-    return "\n\n".join(parts) + "\n"
+             _md_table(rows), _tier_legend(rows), buy, _disclosure_line(disclosures)]
+    return "\n\n".join(p for p in parts if p) + "\n"
 
 def write_report(rows, buy_lines, disclosures, interval, outdir="output"):
     """Write the screen report as a table-first markdown file; return the Path.

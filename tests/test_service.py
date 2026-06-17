@@ -79,6 +79,7 @@ def build_service(
     indicator_failed_symbol=None,
     batch_size=None,
     events=None,
+    end_date=None,
 ):
     service = UpdateService(
         FakeStore(changed, failed_symbol, events),
@@ -86,6 +87,7 @@ def build_service(
         FakeIndicators(indicator_failed_symbol, events),
         get_interval(interval),
         date(2000, 1, 1),
+        end_date,
     )
     return service
 
@@ -96,6 +98,12 @@ def test_update_requests_full_configured_history_for_all_symbols() -> None:
     assert service.yahoo.requests == [
         (["TCS.NS", "INFY.NS"], date(2000, 1, 1), date(2026, 6, 8))
     ]
+
+
+def test_end_date_bounds_download_window() -> None:
+    service = build_service(interval="30m", end_date=date(2020, 3, 15))
+    service.update(["TCS.NS"], datetime(2026, 6, 8, 16, 30, tzinfo=IST))
+    assert service.yahoo.requests == [(["TCS.NS"], date(2000, 1, 1), date(2020, 3, 15))]
 
 
 def test_yahoo_failure_is_isolated() -> None:

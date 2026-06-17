@@ -162,9 +162,12 @@ EMAs/ATR computed on the fly.
 table as a GitHub-flavored markdown table** (same columns and `⚠`/`[IDX]` markers as the chat
 footer, including the trailing `latest candle` column — e.g. `2026-06-16 14:14`; each two-line
 box cell flattened to one line — e.g. `503.9 (+8.6%)`, `460.0 (−0.86%)`,
-`0.733 (−0.067)`, `7≈1.0d`); a `## Buy lines` block reusing the ranked one-liners for the BUY/PATIENT/SPECULATIVE
-picks; then a closing `_Disclosures: …_` line carrying the same disclosures above. **Chat
-output is unchanged** — the file is an added durable copy, not a replacement.
+`0.733 (−0.067)`, `7≈1.0d`); a `## Tiers (this run)` legend defining **only the tier tokens
+that actually appear** in this run (one plain line each, in count-line order — so a reader of
+any report learns what its rows mean without leaving the file); a `## Buy lines` block reusing
+the ranked one-liners for the BUY/PATIENT/SPECULATIVE picks; then a closing `_Disclosures: …_`
+line carrying the same disclosures above. **Chat output is unchanged** — the file is an added
+durable copy, not a replacement.
 
 **Empty shortlist → report plainly "no buyable dips today."** Never force picks, never
 fall back to closest-to-band names.

@@ -38,6 +38,21 @@ def test_load_config_resolves_paths(tmp_path: Path) -> None:
     assert config.indicators.enabled is True
 
 
+def test_load_config_end_date_defaults_to_none(tmp_path: Path) -> None:
+    config = load_config(write_config(tmp_path))
+    assert config.download.end_date is None
+
+
+def test_load_config_parses_end_date(tmp_path: Path) -> None:
+    text = VALID.replace(
+        'initial_start_date = "2000-01-01"',
+        'initial_start_date = "2000-01-01"\nend_date = "2001-06-30"',
+    )
+    config = load_config(write_config(tmp_path, text))
+    assert config.download.end_date is not None
+    assert config.download.end_date.isoformat() == "2001-06-30"
+
+
 @pytest.mark.parametrize(
     "text",
     [
@@ -47,6 +62,10 @@ def test_load_config_resolves_paths(tmp_path: Path) -> None:
         VALID + "\nunknown = true\n",
         VALID.replace("[indicators]\nenabled = true\n", ""),
         VALID.replace("enabled = true\n", ""),
+        VALID.replace(
+            'initial_start_date = "2000-01-01"',
+            'initial_start_date = "2000-01-01"\nend_date = "1999-12-31"',
+        ),
     ],
 )
 def test_load_config_rejects_invalid_values(tmp_path: Path, text: str) -> None:

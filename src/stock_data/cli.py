@@ -111,6 +111,7 @@ def _run(
         indicator_updater,
         interval,
         config.download.initial_start_date,
+        config.download.end_date,
     )
     return service.update(symbols, datetime.now(timezone.utc))
 

@@ -26,7 +26,9 @@ commands. Output is written to `prices/<interval>/<symbol>.parquet`.
 Every command downloads adjusted OHLCV full history from configured
 `download.initial_start_date` through latest completed candle for only selected
 interval. Changed history atomically replaces that interval's symbol file.
-Yahoo-provided volume is persisted unchanged.
+Yahoo-provided volume is persisted unchanged. Set optional `download.end_date`
+to rebuild only through that date instead; rows outside the window are dropped on
+replace.
 
 ## Help
 

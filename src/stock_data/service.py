@@ -49,12 +49,14 @@ class UpdateService:
         indicators: IndicatorUpdater | None,
         interval: IntervalSpec,
         initial_start: date,
+        end_date: date | None = None,
     ) -> None:
         self.store = store
         self.yahoo = yahoo
         self.indicators = indicators
         self.interval = interval
         self.initial_start = initial_start
+        self.end_date = end_date
 
     def update(
         self,
@@ -63,9 +65,17 @@ class UpdateService:
     ) -> UpdateSummary:
         if now.tzinfo is None:
             raise ValueError("now must be timezone-aware")
+        download_end = self.end_date or now.date()
+        if self.end_date is not None:
+            LOGGER.info(
+                "Bounded rebuild interval=%s start=%s end=%s",
+                self.interval.name,
+                self.initial_start,
+                download_end,
+            )
         results = []
         for batch in self.yahoo.download_batches(
-            symbols, self.initial_start, now.date()
+            symbols, self.initial_start, download_end
         ):
             batch_results = [
                 self._process_symbol(symbol, batch.frames, batch.errors, now)

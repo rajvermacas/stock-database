@@ -22,7 +22,8 @@ supported command with sample input, output, and exit codes.
 ## Configuration
 
 Every command requires `--config PATH`. Relative paths are resolved from the
-configuration file's directory. All settings are required.
+configuration file's directory. All settings are required except the optional
+`download.end_date` (see Update Behavior).
 
 ```toml
 [paths]
@@ -31,6 +32,7 @@ symbols_file = "../market-data/metadata/symbols.csv"
 
 [download]
 initial_start_date = "2000-01-01"
+# end_date = "2001-06-30"  # optional: rebuild only through this date
 
 [yahoo]
 interval = "1h"
@@ -57,7 +59,10 @@ INFY.NS
 Every update downloads full history from `download.initial_start_date` through
 the latest completed candle for only the configured interval. A changed result
 atomically replaces that interval's complete symbol file; an equal result is
-left unchanged. Other interval directories are not read or modified.
+left unchanged. Other interval directories are not read or modified. When the
+optional `download.end_date` is set, the update instead rebuilds only
+`download.initial_start_date` through `end_date`; the atomic replace drops any
+rows previously stored outside that window.
 
 Yahoo adjusts Open, High, Low, and Close for corporate actions. Volume is
 persisted unchanged as Yahoo-provided volume. No raw prices, adjusted-close
