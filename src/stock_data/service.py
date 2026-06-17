@@ -118,13 +118,15 @@ class UpdateService:
             normalized = normalize_symbol(symbol, frames[symbol], self.interval, now)
             write = self.store.replace(symbol, normalized)
             status = SymbolStatus.SUCCESS if write.changed else SymbolStatus.UNCHANGED
+            latest_timestamp = normalized["trade_timestamp"].max()
             LOGGER.info(
-                "Update complete symbol=%s interval=%s status=%s downloaded_rows=%d stored_rows=%d",
+                "Update complete symbol=%s interval=%s status=%s downloaded_rows=%d stored_rows=%d latest_timestamp=%s",
                 symbol,
                 self.interval.name,
                 status,
                 write.downloaded_rows,
                 write.stored_rows,
+                latest_timestamp,
             )
             return SymbolResult(
                 symbol, status, write.downloaded_rows, write.stored_rows, None
