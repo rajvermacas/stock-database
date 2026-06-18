@@ -43,6 +43,15 @@ running. Read-only against `market-data/`.
 3. **Stage C — tier + report.** Tier the confirmed candidates, present the report in chat
    (lead + table), then write the full report to a markdown file under `output/` (Block A8).
 
+**Stage S — structural lens (parallel).** Independently of the dip funnel, run the
+pattern-agnostic structural pass (`references/structural-blocks.md`, Blocks S1–S6) over the
+same universe: per stock, build the own-shape library + base_rate (S2), learn the match radius
+(S3), **learn the shape-window `m` by out-of-sample separation** (S4), match the live forming
+shape, score it vs the stock's base_rate, and tier it (S5) with a learned structural stop. Emit
+a **separate `## Structural lens` report section** (S6, `render_struct_section`). The structural
+tiers NEVER cross-rank with the dip tiers — they are two lenses in one report. Buy-strength
+setups (a stock pressing its highs, no dip) surface here, not in the dip funnel.
+
 ## Stage A — proxy net (see references/screening-blocks.md)
 
 Blocks A1–A2. One streaming Polars pass over the whole glob, per symbol: trailing-peak →
@@ -177,6 +186,23 @@ X–Y%", success_rate → "bounces N% of the time", `H_stock` → "usually recov
 trading days", anchor 'none' → "dips are structural"). The numbers live in the footer.
 Structural evidence, not financial advice.
 
+## Structural lens output (Stage S)
+
+A separate `## Structural lens` section (never mixed with the dip table). One row per analyzed
+stock; columns: `Symbol | tier | m (sep) | analogs | score/base (edge) | H≈days | turn | stop ₹
+(−%) | latest candle`. `m (sep)` is the learned shape-window and its out-of-sample separation;
+`score/base (edge)` is the matched-analog success rate vs the stock's unconditional base rate
+and their gap. Tiers:
+
+- **STRUCTURE-BUY** — forming shape whose analogs beat the stock's base rate **beyond one
+  standard error**, a 3%-placeable structural stop, an uptrend, AND a confirmed completion turn.
+- **STRUCTURE-WATCH** — edge present but the turn has not fired, or the structural stop is > 3%.
+- **STRUCTURE-SPEC** — `m` showed no out-of-sample edge, < 5 analogs, or edge within noise of base.
+- **STRUCTURE-AVOID** — analogs *under*-performed the base rate: this shape historically preceded drops.
+
+This lens buys *strength* (a structure resolving up), the mirror of the dip lens that buys
+weakness. The two are reported side by side, never ranked against each other.
+
 ## The law — no frozen pattern constants
 
 > Every **pattern** parameter (W, k, noise filter, depth bands, the recovery horizon
@@ -196,6 +222,13 @@ Structural evidence, not financial advice.
 > `H_stock` and its fast/slow class. A high `bounce@learned` resting on a large `H_stock`
 > is *borrowed time* and must be labeled as such — never reported as a fast, comparable
 > edge.
+>
+> The **structural lens (Stage S) obeys the same law**: the shape-window `m` (chosen per stock
+> by out-of-sample separation), the match radius (q25 of the stock's own pairwise fingerprint
+> distance), the edge cutoff (vs the stock's own base_rate, significant beyond one standard
+> error), and the completion trigger (reused `learn_turn_trigger`) are all learned per stock and
+> disclosed. Only the 3% stop, `H_base=15`, and the statistical floors (min-sample 5, the
+> quantile `q`, the train fraction) are fixed. No named chart pattern is ever hardcoded.
 
 ## Hard rules
 
@@ -228,5 +261,10 @@ Structural evidence, not financial advice.
 | W-sensitive run (overlap < 0.85) | Use the union shortlist; disclose mode + overlap. |
 | Turn trigger unlearnable (< 5 winning dips with an up-thrust) | `turn = unconfirmable`; demote to SPECULATIVE/low-confidence; never invent a lift or EMA. |
 | Live dip still at a fresh low (no lift, no genuine reclaim) | `wait-not-turned` → WAIT tier, never BUY (the knife gate). |
+| Too few pivots / thin library (Stage S) | Skip the structural row; disclose count. |
+| < 5 shape analogs in radius (Stage S) | STRUCTURE-SPEC (low-confidence); never invent. |
+| No live forming structure — price at a new high (Stage S) | Not applicable; skip + disclose. |
+| `m` shows no out-of-sample separation (Stage S) | STRUCTURE-SPEC; the lens has no edge for that stock — never force a BUY. |
+| Structural stop > 3% band (Stage S) | STRUCTURE-WATCH (stop-survival), never BUY. |
 
 This is structural evidence, not financial advice.
