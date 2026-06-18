@@ -571,4 +571,26 @@ git commit -m "test(structural-lens): OOS separation gate + CEMPRO sanity + law 
 
 **Placeholder scan:** no TBD/TODO; every block ships full code; every done-check is a concrete runnable command with an expected signal.
 
-**Naming/output consistency:** `learn_m`, `fingerprint`, `build_library`, `learn_radius`, `live_window`, `match_live`, `structural_stop`, `tier_struct`, `analyze_struct`, `render_struct_section` used consistently across tasks; tier tokens `STRUCTURE-BUY/WATCH/SPEC/AVOID/NA` consistent across code, renderer, SKILL.md, and spec. `/tmp/sblocks.py` accumulation convention applied uniformly.
+**Naming/output consistency:** `fingerprint`, `build_library`, `learn_radius`, `live_window`, `match_live`, `learn_m_predictive`, `structural_stop`, `tier_struct`, `analyze_struct`, `render_struct_section` used consistently across tasks; tier tokens `STRUCTURE-BUY/WATCH/SPEC/AVOID/NA` consistent across code, renderer, SKILL.md, and spec. `/tmp/sblocks.py` accumulation convention applied uniformly.
+
+---
+
+## Revision 1 (2026-06-18, during execution)
+
+The original `m = density × H_stock` (old Block S0) **collapsed to the 3-pivot floor for ~60% of
+stocks (incl. CEMPRO)**, degenerating the structural lens into a single-pullback match. Replaced
+with **predictive m** (`learn_m_predictive`, now Block S4), chosen per stock as the window whose
+shape-analogs best separate forward outcomes out-of-sample. This reorders the build (the match
+machinery must exist before m-selection) and folds the OOS test into the engine:
+
+- **Block order:** S1 fingerprint → S2 library (`build_library`, window-range param for train/val)
+  → S3 `learn_radius`/`live_window`/`match_live` → **S4 `learn_m_predictive`** → S5 stop+tier
+  → S6 driver+renderer. (`build_library` takes `lo/hi` last-pivot-index bounds for train/val splits.)
+- **Driver fix:** `analyze_struct` derives `H_stock` from real `pullback_events` (Block 4), not the
+  junk `[L-pivot-as-low-and-high]` proxy the first draft used.
+- **Tier:** `tier_struct` now takes the `sel` dict; `sel["low_edge"]` (no m separated > 0) → SPEC.
+- **Validated:** CEMPRO → m=5 (sep +0.20), STRUCTURE-SPEC; sample m distribution rich (3–15), not collapsed.
+
+structural-blocks.md was authored in this corrected order and validated by one comprehensive
+done-check (scale-invariance, no-look-ahead, predictive-m, match, stop, tier, driver on CEMPRO +
+25-stock sample) rather than six separate write/test cycles. Spec §6/§10 updated to match.

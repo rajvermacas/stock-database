@@ -86,11 +86,18 @@ Canonicalize every window to **start on a Low** (parity). Result: a `2m` vector.
 any price/scale → same fingerprint. No pattern is named — only encoded. (Normalization +
 start-parity are representation, not tuned values.)
 
-### `m` — learned per stock
-`m = median number of pivots spanned by one H_stock`: over history, count pivots inside each
-`H_stock`-bar forward window, take the median. Floor only at the definitional minimum (a
-structure needs ≥ 3 pivots). Disclosed per stock. Within a stock `m` is constant, so all its
-fingerprints share length and Euclidean distance is well-defined (per-stock pool only).
+### `m` — learned per stock by predictive validation
+`m` is the window length whose shape-analogs best **predict forward outcomes out-of-sample
+on that stock** (`learn_m_predictive`). Over a candidate range derived from the stock's pivot
+supply (`m` from 3 up to the largest window whose train split still holds ≥ a stat-floor of
+windows), split history train/validation; build the library on train, match the validation
+windows, and score **separation** = (realized success among above-median-score matches) −
+(below-median). Pick the `m` with the best separation; disclose `m` + its separation. **No `m`
+separates (≤ 0) → the structural lens has no edge for that stock → low-confidence, never
+forced.** This folds the out-of-sample test into the engine: `m` is chosen *because* it
+predicts, not assumed. (An early density×`H_stock` heuristic was rejected — it collapsed to
+the 3-pivot floor for ~60% of names incl. CEMPRO, degenerating to a single-pullback match.)
+Within a stock `m` is then constant, so all its fingerprints share length (per-stock pool).
 
 ### S2 — Historical library (per stock)
 Slide the `m`-window over the stock's **own** confirmed zigzag history. Each window →
@@ -157,7 +164,8 @@ trigger. Global scaffolding line: 3% · `H_base=15` · min-sample floor · `q`.
 3. **Out-of-sample separation** (the real edge test) — walk-forward: build the library on bars
    ≤ T, score live matches at T, measure realized forward outcome after T across the universe.
    **No separation from `base_rate` out-of-sample → the lens has no edge; report that, do not
-   ship a toothless tier.**
+   ship a toothless tier.** Per-stock `m` is already chosen by this same separation criterion
+   (§6); this universe gate aggregates and confirms across stocks.
 4. **CEMPRO sanity** — CEMPRO surfaces as STRUCTURE-BUY or -WATCH (no longer invisible).
 5. **Law audit** — grep the new blocks: every sizing/threshold traces to a learned value or
    the disclosed scaffolding list; no stray literals.
