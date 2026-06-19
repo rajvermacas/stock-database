@@ -162,3 +162,6 @@ pytest -v
 ruff check src tests
 ruff format --check src tests
 ```
+-------------------------
+
+/talk-to-parquet syrma.ns hourly find out its pullback pattern, rhythm of trend, repetable structural pattern from historical data and find out is it a good time to buy?
