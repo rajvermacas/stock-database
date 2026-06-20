@@ -305,3 +305,13 @@ Use hourly as well as daily timeframe. also mention what has changed recently th
 ------------------------
 
 do a stock screening to find out stocks to buy on pullback
+------------------------
+
+/talk-to-parquet 
+Daily - Sort all the stocks on rsi in descending                                                                                                                 
+hourly - stocks that are taking support from 10 ema and 20 ema                                                                                                                      
+hourly - From current stock price - ema 10, ema20 are within -3% 
+hourly - close > ema20 > ema50 > ema 100 > ema 200
+hourly - Out of the filtered stocks which are the most likely to take support from ema10, ema20 or ema50 and bounces back
+
+------------------------
