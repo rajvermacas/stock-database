@@ -372,33 +372,6 @@ if [ "$REPO_AVAILABLE" = true ]; then
             log "⚠ No Codex skills directory found at: $SOURCE_DIR"
         fi
 
-        # Codex superpower skill
-        log ""
-        log "Processing Codex superpower skill..."
-        if [ -d "$TARGET_HOME/.codex/superpowers" ]; then
-            log "Superpowers directory already exists, pulling latest..."
-            if git -C "$TARGET_HOME/.codex/superpowers" pull 2>/dev/null; then
-                log "✓ Updated superpowers repository"
-            else
-                log "⚠ Failed to update superpowers repository"
-            fi
-        else
-            if git clone https://github.com/obra/superpowers.git "$TARGET_HOME/.codex/superpowers" 2>/dev/null; then
-                log "✓ Cloned superpowers repository"
-            else
-                log "⚠ Failed to clone superpowers repository"
-            fi
-        fi
-
-        mkdir -p "$TARGET_HOME/.agents/skills"
-        if [ ! -L "$TARGET_HOME/.agents/skills/superpowers" ]; then
-            ln -s "$TARGET_HOME/.codex/superpowers/skills" "$TARGET_HOME/.agents/skills/superpowers"
-            log "✓ Created superpowers symlink"
-        else
-            log "  Superpowers symlink already exists"
-        fi
-        log "✓ Configured Codex superpower skill"
-
         log "✓ Copied Codex config"
     else
         log "No Codex directory found at: $TEMP_DIR/.codex"
