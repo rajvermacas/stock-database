@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import numpy as np
 import polars as pl
@@ -40,37 +40,21 @@ INDICATOR_SCHEMA = {
     "trade_timestamp": pl.Datetime(time_unit="us", time_zone="Asia/Kolkata"),
     **{column: pl.Float64 for column in INDICATOR_COLUMNS},
 }
-# relative_volume_20 is undefined for zero-volume instruments (e.g. indices),
-# where volume_ema_20 is 0. It may be null; every other indicator must be
-# present and finite.
-NULLABLE_INDICATOR_COLUMNS = ("relative_volume_20",)
-STRICT_INDICATOR_COLUMNS = [
-    column for column in INDICATOR_COLUMNS if column not in NULLABLE_INDICATOR_COLUMNS
-]
 
 
 class IndicatorError(ValueError):
     """Raised when indicators cannot be calculated or validated."""
 
 
-def calculate_indicators(prices: pl.DataFrame) -> pl.DataFrame | None:
+def calculate_indicators(prices: pl.DataFrame) -> pl.DataFrame:
     try:
         _validate_prices(prices)
         threshold = prices["trade_timestamp"].min() + timedelta(days=365)
-        if prices["trade_timestamp"].max() < threshold:
-            return None
         frame = _attach_talib_columns(prices)
-        frame = _add_calendar_columns(frame)
+        frame = _add_calendar_columns(frame, threshold)
         frame = _add_derived_columns(frame)
-        result = frame.filter(pl.col("trade_timestamp") >= threshold).select(
-            *INDICATOR_SCHEMA
-        )
-        result = result.cast(INDICATOR_SCHEMA, strict=True)
-        result = result.filter(
-            pl.all_horizontal(
-                [pl.col(column).is_finite() for column in STRICT_INDICATOR_COLUMNS]
-            )
-        )
+        result = frame.select(*INDICATOR_SCHEMA).cast(INDICATOR_SCHEMA, strict=True)
+        result = _nullify_non_finite(result)
         _validate_result(result)
         return result
     except (TypeError, ValueError, pl.exceptions.PolarsError) as exc:
@@ -115,19 +99,35 @@ def _talib_columns(prices: pl.DataFrame) -> dict[str, np.ndarray]:
     }
 
 
-def _add_calendar_columns(frame: pl.DataFrame) -> pl.DataFrame:
+def _add_calendar_columns(frame: pl.DataFrame, threshold: datetime) -> pl.DataFrame:
+    # trailing_365d_* need a full calendar year behind the row; rows before the
+    # threshold see a truncated window, so null them rather than report a
+    # partial high/low.
+    complete = pl.col("trade_timestamp") >= threshold
     return frame.with_columns(
-        pl.col("high")
-        .rolling_max_by("trade_timestamp", window_size="365d", closed="both")
+        pl.when(complete)
+        .then(
+            pl.col("high").rolling_max_by(
+                "trade_timestamp", window_size="365d", closed="both"
+            )
+        )
+        .otherwise(None)
         .alias("trailing_365d_high"),
-        pl.col("low")
-        .rolling_min_by("trade_timestamp", window_size="365d", closed="both")
+        pl.when(complete)
+        .then(
+            pl.col("low").rolling_min_by(
+                "trade_timestamp", window_size="365d", closed="both"
+            )
+        )
+        .otherwise(None)
         .alias("trailing_365d_low"),
     )
 
 
 def _add_derived_columns(frame: pl.DataFrame) -> pl.DataFrame:
     frame = frame.with_columns(
+        # relative_volume_20 is undefined for zero-volume instruments (e.g.
+        # indices) where volume_ema_20 is 0; it stays null there.
         pl.when(pl.col("volume_ema_20") == 0)
         .then(None)
         .otherwise(pl.col("volume") / pl.col("volume_ema_20"))
@@ -164,13 +164,27 @@ def _validate_prices(prices: pl.DataFrame) -> None:
         raise IndicatorError("Price data is not sorted")
 
 
+def _nullify_non_finite(result: pl.DataFrame) -> pl.DataFrame:
+    # Each indicator is gated by its own lookback: where TA-Lib emits NaN (or a
+    # derived division yields inf) the cell is nulled, keeping the row and every
+    # other indicator intact.
+    return result.with_columns(
+        pl.when(pl.col(column).is_finite())
+        .then(pl.col(column))
+        .otherwise(None)
+        .alias(column)
+        for column in INDICATOR_COLUMNS
+    )
+
+
 def _validate_result(result: pl.DataFrame) -> None:
     if result.is_empty():
         raise IndicatorError("Indicator result is empty")
     if result.schema != INDICATOR_SCHEMA:
         raise IndicatorError(f"Unexpected indicator schema: {result.schema}")
-    strict = result.select(pl.exclude(*NULLABLE_INDICATOR_COLUMNS))
-    if strict.null_count().select(pl.sum_horizontal(pl.all())).item() > 0:
-        raise IndicatorError("Indicator result contains nulls")
-    if not np.isfinite(result.select(STRICT_INDICATOR_COLUMNS).to_numpy()).all():
+    finite_or_null = result.select(
+        (pl.col(column).is_finite() | pl.col(column).is_null()).all()
+        for column in INDICATOR_COLUMNS
+    )
+    if not all(finite_or_null.row(0)):
         raise IndicatorError("Indicator result contains non-finite values")

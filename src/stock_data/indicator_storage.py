@@ -8,14 +8,9 @@ import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-import numpy as np
 import polars as pl
 
-from stock_data.indicators import (
-    INDICATOR_SCHEMA,
-    NULLABLE_INDICATOR_COLUMNS,
-    STRICT_INDICATOR_COLUMNS,
-)
+from stock_data.indicators import INDICATOR_COLUMNS, INDICATOR_SCHEMA
 from stock_data.intervals import IntervalSpec
 from stock_data.normalization import CANONICAL_COLUMNS, CANONICAL_SCHEMA
 
@@ -185,10 +180,11 @@ class IndicatorStore:
             )
         if frame.is_empty():
             raise IndicatorStorageError(f"Indicator data for {symbol} is empty")
-        strict = frame.select(pl.exclude(*NULLABLE_INDICATOR_COLUMNS))
-        if strict.null_count().select(pl.sum_horizontal(pl.all())).item() > 0:
-            raise IndicatorStorageError(f"Indicator data for {symbol} contains nulls")
-        if not np.isfinite(frame.select(STRICT_INDICATOR_COLUMNS).to_numpy()).all():
+        finite_or_null = frame.select(
+            (pl.col(column).is_finite() | pl.col(column).is_null()).all()
+            for column in INDICATOR_COLUMNS
+        )
+        if not all(finite_or_null.row(0)):
             raise IndicatorStorageError(f"Indicator data for {symbol} is non-finite")
         if frame["symbol"].unique().to_list() != [symbol]:
             raise IndicatorStorageError("Indicator data contains unexpected symbols")

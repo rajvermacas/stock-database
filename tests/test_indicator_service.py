@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 
 import pytest
@@ -69,13 +68,18 @@ def test_changed_price_forces_recalculation() -> None:
     assert indicator_store.published_symbols == ["TCS.NS"]
 
 
-def test_insufficient_history_removes_stale_indicator(caplog) -> None:
+def test_short_history_publishes_partial_indicators() -> None:
     updater, indicator_store = build_updater(current=False, sufficient=False)
-    with caplog.at_level(logging.WARNING):
-        result = updater.refresh("TCS.NS", prices_changed=False)
+    result = updater.refresh("TCS.NS", prices_changed=False)
     assert result.changed is True
-    assert indicator_store.removed_symbols == ["TCS.NS"]
-    assert "Insufficient indicator history" in caplog.text
+    assert indicator_store.published_symbols == ["TCS.NS"]
+    assert indicator_store.removed_symbols == []
+    # Short history publishes a partial frame: long-lookback indicators are
+    # null while short ones populate, instead of removing the symbol.
+    frame = indicator_store.frame
+    assert frame is not None
+    assert frame["trailing_365d_high"].null_count() == frame.height
+    assert frame["ema_10"][-1] is not None
 
 
 def test_missing_price_fails_fast() -> None:

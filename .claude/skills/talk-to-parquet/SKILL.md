@@ -47,9 +47,11 @@ distance_from_365d_high_percent`
 - Raise a clear error when a symbol, interval, or date range is unavailable. Never
   invent missing data, silently substitute another symbol, or shorten the requested
   range without disclosing it.
-- Treat prices as adjusted for corporate actions; volume is Yahoo-provided. Indicator
-  files start only after a full 365-calendar-day warm-up and contain no null rows —
-  disclose symbols excluded for insufficient lookback.
+- Treat prices as adjusted for corporate actions; volume is Yahoo-provided. Each
+  indicator cell is null until that indicator's own lookback is satisfied (e.g. `ema_200`
+  needs 200 bars; `trailing_365d_high`/`trailing_365d_low`/`distance_from_365d_high_percent`
+  need a full 365-calendar-day window), so never assume a column is fully populated —
+  filter `is_not_null()` per indicator and disclose rows dropped for insufficient lookback.
 - Compare symbols over a shared date range when a direct comparison is requested. Sort
   deterministically with `symbol` as the final tie-breaker.
 

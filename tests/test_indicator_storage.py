@@ -11,7 +11,7 @@ from stock_data.indicator_storage import (
 )
 from stock_data.indicators import calculate_indicators
 from stock_data.intervals import get_interval
-from test_indicators import price_history
+from test_indicators import price_history, weekly_history
 
 
 def test_paths_include_selected_interval(tmp_path: Path) -> None:
@@ -43,6 +43,20 @@ def test_publish_and_read_metadata(tmp_path: Path) -> None:
     stored = store.read("TCS.NS")
     assert stored is not None and stored.equals(indicators)
     assert store.is_current("TCS.NS", fingerprint)
+
+
+def test_publish_and_read_frame_with_nulls(tmp_path: Path) -> None:
+    prices = weekly_history(120)
+    indicators = calculate_indicators(prices)
+    assert indicators is not None
+    # ema_200 is null for every row (only 120 weekly bars); storage must accept
+    # and round-trip per-cell nulls.
+    assert indicators["ema_200"].null_count() == indicators.height
+    store = IndicatorStore(tmp_path, get_interval("1wk"))
+    fingerprint = source_fingerprint(prices)
+    store.publish("TCS.NS", indicators, fingerprint)
+    stored = store.read("TCS.NS")
+    assert stored is not None and stored.equals(indicators)
 
 
 def test_missing_pair_is_not_current(tmp_path: Path) -> None:

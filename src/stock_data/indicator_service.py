@@ -43,8 +43,6 @@ class IndicatorUpdater:
                     )
                 return IndicatorUpdateResult(False, current.height)
             indicators = calculate_indicators(prices)
-            if indicators is None:
-                return self._remove_insufficient(symbol, prices.height)
             self.indicator_store.publish(symbol, indicators, fingerprint)
             LOGGER.info(
                 "Indicator refresh complete symbol=%s interval=%s source_rows=%d indicator_rows=%d",
@@ -61,15 +59,3 @@ class IndicatorUpdater:
                 f"Indicator refresh failed symbol={symbol} "
                 f"interval={self.price_store.interval.name}: {exc}"
             ) from exc
-
-    def _remove_insufficient(
-        self, symbol: str, source_rows: int
-    ) -> IndicatorUpdateResult:
-        removed = self.indicator_store.remove(symbol)
-        LOGGER.warning(
-            "Insufficient indicator history symbol=%s interval=%s source_rows=%d",
-            symbol,
-            self.price_store.interval.name,
-            source_rows,
-        )
-        return IndicatorUpdateResult(removed, 0)
