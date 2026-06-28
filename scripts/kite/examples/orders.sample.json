@@ -1,0 +1,49 @@
+{
+  "orders": [
+    {
+      "type": "regular",
+      "exchange": "NSE",
+      "tradingsymbol": "INFY",
+      "transaction_type": "BUY",
+      "quantity": 1,
+      "product": "CNC",
+      "order_type": "MARKET",
+      "validity": "DAY",
+      "tag": "delivery-buy"
+    },
+    {
+      "type": "amo",
+      "exchange": "NSE",
+      "tradingsymbol": "TCS",
+      "transaction_type": "BUY",
+      "quantity": 2,
+      "product": "CNC",
+      "order_type": "LIMIT",
+      "price": 3500.0,
+      "validity": "DAY"
+    },
+    {
+      "type": "gtt",
+      "trigger_type": "single",
+      "exchange": "NSE",
+      "tradingsymbol": "RELIANCE",
+      "last_price": 2900.0,
+      "trigger_values": [2700.0],
+      "legs": [
+        {"transaction_type": "BUY", "quantity": 1, "product": "CNC", "price": 2700.0}
+      ]
+    },
+    {
+      "type": "gtt",
+      "trigger_type": "oco",
+      "exchange": "NSE",
+      "tradingsymbol": "HDFCBANK",
+      "last_price": 1600.0,
+      "trigger_values": [1450.0, 1750.0],
+      "legs": [
+        {"transaction_type": "SELL", "quantity": 5, "product": "CNC", "price": 1450.0},
+        {"transaction_type": "SELL", "quantity": 5, "product": "CNC", "price": 1750.0}
+      ]
+    }
+  ]
+}
