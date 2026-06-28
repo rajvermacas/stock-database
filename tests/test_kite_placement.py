@@ -8,9 +8,14 @@ from scripts.kite.placement import format_summary, place_one, run_batch
 
 def _regular(**kw):
     base = dict(
-        type="regular", exchange="NSE", tradingsymbol="INFY",
-        transaction_type="BUY", quantity=1, product="CNC",
-        order_type="MARKET", validity="DAY",
+        type="regular",
+        exchange="NSE",
+        tradingsymbol="INFY",
+        transaction_type="BUY",
+        quantity=1,
+        product="CNC",
+        order_type="MARKET",
+        validity="DAY",
     )
     base.update(kw)
     return RegularOrder(**base)
@@ -18,22 +23,45 @@ def _regular(**kw):
 
 def _gtt_single():
     return GttOrder(
-        type="gtt", trigger_type="single", exchange="NSE",
-        tradingsymbol="RELIANCE", last_price=2900.0, trigger_values=[2700.0],
-        legs=[{"transaction_type": "BUY", "quantity": 1,
-               "product": "CNC", "price": 2700.0}],
+        type="gtt",
+        trigger_type="single",
+        exchange="NSE",
+        tradingsymbol="RELIANCE",
+        last_price=2900.0,
+        trigger_values=[2700.0],
+        legs=[
+            {
+                "transaction_type": "BUY",
+                "quantity": 1,
+                "product": "CNC",
+                "price": 2700.0,
+            }
+        ],
     )
 
 
 def _gtt_oco():
     return GttOrder(
-        type="gtt", trigger_type="oco", exchange="NSE",
-        tradingsymbol="HDFCBANK", last_price=1600.0,
+        type="gtt",
+        trigger_type="oco",
+        exchange="NSE",
+        tradingsymbol="HDFCBANK",
+        last_price=1600.0,
         trigger_values=[1450.0, 1750.0],
-        legs=[{"transaction_type": "SELL", "quantity": 5,
-               "product": "CNC", "price": 1450.0},
-              {"transaction_type": "SELL", "quantity": 5,
-               "product": "CNC", "price": 1750.0}],
+        legs=[
+            {
+                "transaction_type": "SELL",
+                "quantity": 5,
+                "product": "CNC",
+                "price": 1450.0,
+            },
+            {
+                "transaction_type": "SELL",
+                "quantity": 5,
+                "product": "CNC",
+                "price": 1750.0,
+            },
+        ],
     )
 
 

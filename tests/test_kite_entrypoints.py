@@ -9,7 +9,8 @@ from scripts.kite.placement import OrderResult
 def test_login_happy_path(mocker):
     mocker.patch.object(lg, "configure_logging")
     mocker.patch.object(
-        lg, "load_credentials",
+        lg,
+        "load_credentials",
         return_value=mocker.Mock(api_key="k", api_secret="s"),
     )
     mocker.patch.object(lg, "build_login_url", return_value="http://login")
@@ -39,7 +40,8 @@ def _patch_setup(mocker):
 def test_place_orders_all_ok(mocker, tmp_path):
     _patch_setup(mocker)
     mocker.patch.object(
-        po, "run_batch",
+        po,
+        "run_batch",
         return_value=[OrderResult(1, "regular", "INFY", "BUY", 1, True, "OID1")],
     )
     assert po.main(["--orders", str(tmp_path / "o.json")]) == 0
@@ -48,7 +50,8 @@ def test_place_orders_all_ok(mocker, tmp_path):
 def test_place_orders_partial_failure(mocker, tmp_path):
     _patch_setup(mocker)
     mocker.patch.object(
-        po, "run_batch",
+        po,
+        "run_batch",
         return_value=[OrderResult(1, "regular", "INFY", "BUY", 1, False, "err")],
     )
     assert po.main(["--orders", str(tmp_path / "o.json")]) == 1

@@ -89,7 +89,12 @@ def run_batch(
         side, qty = _describe_side(order)
         logger.info(
             "Placing %d/%d: %s %s %s x%d",
-            index, total, order.type, side, order.tradingsymbol, qty,
+            index,
+            total,
+            order.type,
+            side,
+            order.tradingsymbol,
+            qty,
         )
         try:
             reference = place_one(kite, order)
