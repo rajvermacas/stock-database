@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "TA-Lib>=0.6",
+  "kiteconnect>=5.2,<6",
   "polars>=1.0",
   "pydantic>=2.0",
   "typer>=0.12",
@@ -25,6 +26,7 @@ packages = ["src/stock_data"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 88

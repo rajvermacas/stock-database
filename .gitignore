@@ -11,3 +11,6 @@ market-data/prices/
 market-data/indicators/
 market-data/logs/
 
+scripts/kite/secrets/
+scripts/kite/logs/
+
