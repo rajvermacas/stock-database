@@ -7,6 +7,86 @@ a wrong drop is not (Stage B never sees it).
 
 Run everything read-only from the repo root with `.venv/bin/python` via heredoc. Never
 write a scratch file into the repo — the sole permitted write is the final report (Block A8).
+The ONE other sanctioned write is the Stage-0 freshness fetch (Block A0), which *appends*
+bars to the data lake via the project pipeline (never an overwrite — see
+`../pullback-finder/references/data.md`).
+
+## Block A0 — data-freshness preflight (Stage 0; runs before A1)
+
+The screen is a LIVE read — it MUST run on data that includes the latest *completed*
+trading session. **"On disk" is not "current":** `1d`/`1h` live in the lake but drift stale
+between runs (e.g. screening Thursday's bars on the following Tuesday). A0 asserts freshness
+and **auto-heals** by appending the missing bars through the pipeline, then re-asserts. It is
+holiday-safe (a max still behind after a clean refresh = the gap days were holidays / Yahoo
+has nothing newer, so the data IS current) and **fail-fast on a fetch error** (never screen
+on data you could not verify). Run it FIRST, before `calibrate_W`.
+
+```python
+import subprocess, datetime, zoneinfo
+import polars as pl
+
+IST = zoneinfo.ZoneInfo("Asia/Kolkata")
+# per-interval pipeline configs. NOTE: there is NO `config/stock-data.toml`; the real
+# files are `config/stock-data-<interval>.toml` (paths inside resolve relative to config/).
+_UPDATE_CFG = {"1h": "config/stock-data-1h.toml", "1d": "config/stock-data-1d.toml",
+               "1wk": "config/stock-data-1wk.toml", "1mo": "config/stock-data-1mo.toml"}
+
+def latest_bar(interval):
+    """Universe-wide max trade_timestamp on disk (one streaming scan). None if empty."""
+    return (pl.scan_parquet(f"market-data/prices/{interval}/*.parquet")
+            .select(pl.col("trade_timestamp").max()).collect(engine="streaming").item())
+
+def expected_last_session(now=None):
+    """Conservative date of the latest COMPLETED NSE session (IST): Mon–Fri, close 15:30,
+    require past 16:00 to count today. Holidays make this an UPPER bound — see assert_fresh."""
+    now = now or datetime.datetime.now(IST)
+    d = now.date()
+    if now.hour < 16:                       # today's session not safely settled yet
+        d -= datetime.timedelta(days=1)
+    while d.weekday() >= 5:                  # Sat/Sun -> previous weekday
+        d -= datetime.timedelta(days=1)
+    return d
+
+def refresh(interval):
+    """Append-only bulk fetch of the whole universe (`update-all`). Returns the
+    CompletedProcess; does NOT raise on a partial (per-symbol) failure — a 210-symbol
+    bulk fetch routinely has one transient Yahoo miss while still bringing the universe
+    current. assert_fresh judges success by whether the universe max actually advanced."""
+    cfg = _UPDATE_CFG.get(interval)
+    if cfg is None:
+        raise ValueError(f"no repo config for {interval}; write a /tmp config (data.md), then update-all")
+    return subprocess.run([".venv/bin/stock-data", "--config", cfg, "update-all"],
+                          capture_output=True, text=True)
+
+def assert_fresh(interval):
+    """Stage-0 gate. Refresh-when-stale (auto-heal), holiday-safe. Raises only on an empty
+    lake or a refresh that BOTH errored AND left the data stale. Returns a disclosure dict
+    — surface it in chat AND the report."""
+    before = latest_bar(interval)
+    if before is None:
+        raise ValueError(f"no on-disk data for {interval}; fetch full history first (data.md)")
+    exp = expected_last_session()
+    if before.date() >= exp:
+        return {"interval": interval, "refreshed": False, "latest": before,
+                "expected": exp, "exit": None, "note": "already current"}
+    cp = refresh(interval)                           # stale -> auto-refresh the whole universe
+    after = latest_bar(interval)
+    if after is not None and after.date() >= exp:    # universe advanced -> success
+        partial = "" if cp.returncode == 0 else f" (pipeline exit {cp.returncode}; some symbols may have failed)"
+        return {"interval": interval, "refreshed": True, "before": before, "latest": after,
+                "expected": exp, "exit": cp.returncode, "note": "refreshed to latest session" + partial}
+    if cp.returncode == 0:                           # clean exit, still behind -> holiday / no new data
+        return {"interval": interval, "refreshed": True, "before": before, "latest": after,
+                "expected": exp, "exit": 0,
+                "note": "still behind after a clean refresh -> gap days were holidays / "
+                        "Yahoo has nothing newer (treated as current)"}
+    raise RuntimeError(f"refresh failed for {interval}: still stale (latest {after}, expected "
+                       f"{exp}) and update-all exited {cp.returncode}: {cp.stderr[-1000:]}")
+```
+
+The gate decides on the universe-wide max; `update-all` pulls **every** symbol forward, so
+per-symbol laggards are cured too, and each row's `latest candle` column (Block A8) stays the
+per-symbol freshness audit. **Never run `calibrate_W` (Block A1) before `assert_fresh` returns.**
 
 ## Block A1 — proxy net at one window W
 
