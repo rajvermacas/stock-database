@@ -61,7 +61,7 @@ Interval is set in a config TOML; there is no CLI interval flag. Reuse the repo
 config when the interval matches one it already targets, otherwise write a throwaway
 config to `/tmp` (absolute paths, indicators off since the skill computes its own):
 
-- `1h` → `.venv/bin/stock-data --config config/stock-data.toml update-symbol SYMBOL`
+- `1h` → `.venv/bin/stock-data --config config/stock-data-1h.toml update-symbol SYMBOL`
 - `1d` → `.venv/bin/stock-data --config config/stock-data-1d.toml update-symbol SYMBOL`
 - any other interval → write `/tmp/pf-<interval>.toml` (keep `[indicators] enabled =
   false`, see note below):

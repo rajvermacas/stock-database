@@ -32,9 +32,17 @@ _UPDATE_CFG = {"1h": "config/stock-data-1h.toml", "1d": "config/stock-data-1d.to
                "1wk": "config/stock-data-1wk.toml", "1mo": "config/stock-data-1mo.toml"}
 
 def latest_bar(interval):
-    """Universe-wide max trade_timestamp on disk (one streaming scan). None if empty."""
-    return (pl.scan_parquet(f"market-data/prices/{interval}/*.parquet")
-            .select(pl.col("trade_timestamp").max()).collect(engine="streaming").item())
+    """The universe's MEDIAN per-symbol latest bar (robust). The universe-wide *max* is
+    fragile — one freshly-poked symbol would mask a stale universe (and one permanent
+    laggard would force endless refreshes); the median tracks the bulk and ignores a few
+    outliers on either side. None if the lake is empty. (Per-symbol staleness is still
+    exposed by the `latest candle` column, Block A8.)"""
+    per = (pl.scan_parquet(f"market-data/prices/{interval}/*.parquet")
+           .group_by("symbol").agg(pl.col("trade_timestamp").max().alias("t"))
+           .collect(engine="streaming"))
+    if per.height == 0:
+        return None
+    return per["t"].sort()[per.height // 2]
 
 def expected_last_session(now=None):
     """Conservative date of the latest COMPLETED NSE session (IST): Mon–Fri, close 15:30,
