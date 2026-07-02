@@ -48,14 +48,19 @@ wrong — every stock's nature differs.
 5. `signature` (7): the stock's own depth band, dominant anchor, success rate. Then
    `learn_turn_trigger` (7b): the stock's learned rebound trigger (`learned_lift` in its own
    ATR, `learned_reclaim_ema`, `learned_turn_lag`) from its winning dips.
-6. `current_state` (8) — pass `trigger=` so it runs `live_turn` (8c) internally. Read the
-   label: `buy-the-dip-turned` (turned — a buy), `wait-not-turned` (in band, no turn yet —
-   the falling-knife hold), `buyable-dip-now/turn-unconfirmable` (trigger unlearnable —
-   low-confidence), plus the older `pullback-coming/wait` / `no-match`. Read both
-   invalidation levels: `near_term_invalidation` (the live higher-low) is the stop you quote;
+6. `current_state` (8) — pass `trigger=` so it runs `live_turn` (8c) internally. Depth is
+   measured off the **live swing high** (8a) and band membership off the **live dip LOW**
+   (`dip_depth`), never today's close. Read the label: `buy-the-dip-turned` (turned — a
+   buy), `wait-not-turned` (in band, no turn yet — the falling-knife hold),
+   `buyable-dip-now/turn-unconfirmable` (trigger unlearnable — low-confidence),
+   `dip-deeper-than-usual` (uptrend intact but beyond its own P90 depth — caution, never
+   a buy), `late-rebound/watch` (dip valid but already mostly retraced — a chase), plus
+   `pullback-coming/wait` / `no-match`. Read both invalidation levels:
+   `near_term_invalidation` (the live higher-low) is the stop you quote;
    `structural_floor` is the deeper full-trend-break level. Also read `turn`: `path` (which of
    lift/reclaim fired), `cur_lift` vs `learned_lift`, and `trigger_lift_price` /
-   `trigger_ema_price` (the buy trigger to quote when not yet turned).
+   `trigger_ema_price` (the buy trigger to quote when not yet turned). If
+   `ref_high_confirmed` is False, the reference high is a raw (unconfirmed) bar — disclose.
 7. Decide whether to **zoom in** (see "When to zoom in"): if the call turns on the
    exact swing low / stop or the anchor frame is too thin, drop one frame finer
    (fetching it if needed) and fold the sharper low/stop into the report.
@@ -73,8 +78,8 @@ wrong — every stock's nature differs.
    `Symbol | n dips | usual dip % | now off high % | live-low dip % | bounce rate |
    live low ₹ (−%) | floor ₹ (−%) | latest candle`. Mark a row ⚠ when the floor's % is
    smaller than the live low's % (live low sits below the floor → near-term structure
-   cracked). (`dip %`, `now off high %` and `live-low dip %` are measured from the swing
-   HIGH = pullback depth; the `(−%)` beside each ₹ stop is measured from the latest CLOSE =
+   cracked). (`dip %`, `now off high %` and `live-low dip %` are measured from the LIVE swing
+   HIGH (Block 8a, never the stale confirmed pivot) = pullback depth; the `(−%)` beside each ₹ stop is measured from the latest CLOSE =
    stop distance — same low, two reference points.) `latest candle` is the
    `trade_timestamp` of the most recent bar each stock was analyzed on (`YYYY-MM-DD HH:MM`,
    from `last["trade_timestamp"]`) — surfaced to fact-check which candle the row used.
@@ -199,12 +204,23 @@ live low sits below the floor → near-term structure already cracked; flag it.
   EMA — union). A live dip still printing fresh lows (no lift, no genuine reclaim) is
   `wait-not-turned`, the falling-knife hold, never a buy. `< 5` winning dips with an up-thrust
   → `turn-unconfirmable, low-confidence`; never invent a lift or an EMA.
+- **Never measure the current dip off the confirmed swing high alone.** The confirmed
+  zigzag is blind to the real top two ways: the chart-edge zone (`center=True` nulls
+  the last `k` bars) AND persistent rallies that print no H pivot for months (each
+  local max is exceeded within `k` bars). Always recover the live swing high
+  (Block 8a) as the depth reference; a stale pivot turns a real deep dip into a
+  negative "depth" and a "near high / wait" mislabel.
 - **Never quote invalidation off confirmed pivots alone.** The latest swing is
   unconfirmable at the chart edge (`center=True` nulls the last `k` bars), so the
   forming higher-low is invisible to the confirmed list. Recover it with
-  `live_pullback_low` (Block 8b, raw-bar scan) and report TWO levels: near-term (the
-  live higher-low = the stop) and structural floor (prior confirmed higher-low = full
-  trend break). Quoting the deep floor as the stop is a bug.
+  `live_pullback_low` (Block 8b — raw-bar scan anchored on the live high) and report
+  TWO levels: near-term (the live higher-low = the stop) and structural floor (last
+  confirmed higher-low = full trend break). Quoting the deep floor as the stop is a bug.
+- **Judge band membership on the live dip's LOW (`dip_depth`), never on today's
+  close.** A dip that tagged the band and then turned bounces its close back out of
+  the band — a close-based gate mislabels the best entries as "wait". `cur_depth`
+  only locates price within the dip; `rebound_frac` guards against chasing a dip
+  that already mostly recovered.
 - Pattern thresholds (pivot window, noise filter, depth/retrace bands) are derived
   per stock from its own distribution and disclosed. Risk barriers (3% hard stop,
   ~10–15 bar time stop) are the trader's fixed model — explicit, stated, distinct

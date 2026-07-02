@@ -273,14 +273,16 @@ repo, paste them into the same heredoc — with these screening additions:
    is not None)`.
 8. `vf = volume_fade(df, leg_start_ts, high_ts, live_low_ts)` (Block A4) on the live dip
    — annotation only. For the live (unconfirmed) dip, `leg_start_ts` = the last confirmed
-   low before the last confirmed high; `high_ts` = the last confirmed high; `live_low_ts`
-   = the live low's timestamp from `live_pullback_low`.
+   low; `high_ts` = the LIVE swing high's timestamp (`state["ref_high_ts"]`, Block 8a — the
+   confirmed pivot can be months stale in a persistent rally); `live_low_ts` = the live
+   low's timestamp from `live_pullback_low`.
 9. Compute each level's % from the latest close: `(close - level) / close * 100` for
    `near_term_invalidation` and `structural_floor` (both below close → shown under `(−%)`).
-   Also read the swing high `live_high_price = last_high[2]` (the last confirmed `"H"` in
-   `zz`; `None` if there is no confirmed high) and `live_high_pct = (live_high_price -
-   close) / close * 100` — normally positive (high above close, the level to reclaim), shown
-   under `(+%)`.
+   Also read the swing high `live_high_price = state["ref_high"]` (the LIVE swing high,
+   Block 8a — never the bare confirmed pivot, which goes stale in persistent rallies;
+   `state["ref_high_confirmed"]` says whether it is a confirmed pivot) and
+   `live_high_pct = (live_high_price - close) / close * 100` — normally positive (high
+   above close, the level to reclaim), shown under `(+%)`.
 
 `n_events < 5` for a symbol → label it low-confidence; never invent a signature.
 This is the SAME math pullback-finder uses for a single symbol — Stage B is that workflow

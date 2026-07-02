@@ -190,6 +190,7 @@ def signature(events):
         "confidence": "ok",
         "depth_median": depth.median(),
         "depth_iqr": [depth.quantile(0.25), depth.quantile(0.75)],
+        "depth_p90": depth.quantile(0.90),
         "retrace_median": (df["retrace_pct"].drop_nulls() * 100).median(),
         "dominant_anchor": df["anchor"].mode().to_list()[:1],
         "success_rate": df.filter(pl.col("resolved"))["success"].mean(),
@@ -197,8 +198,12 @@ def signature(events):
     }
 ```
 
-`depth_iqr` IS the stock's own pullback band. A current dip inside it is "typical";
-outside it is not. There is no global depth threshold anywhere.
+`depth_iqr` IS the stock's own pullback band; `depth_p90` is its deep edge. The buy
+window runs P25→P90, not the bare IQR: by construction 25% of the stock's OWN valid
+dips are deeper than P75, so treating the IQR as a hard gate rejects a quarter of its
+own history. Inside the IQR = "typical"; between P75 and P90 = "deeper than usual but
+still its own behavior"; beyond P90 = atypical (caution label, Block 8). There is no
+global depth threshold anywhere.
 
 ## Block 7b — Learned turn trigger (the stock's own rebound signature)
 
@@ -264,50 +269,109 @@ valid structural answer, like `dominant_anchor`). `< min_winners` usable winners
 
 ## Block 8 — Current state (today's label)
 
+Two hard-won rules are baked in. (1) Every depth is measured off the **live swing
+high** (Block 8a), never the bare confirmed pivot — the confirmed high can be months
+stale in a persistent rally, which flips a real deep dip into a negative "depth".
+(2) Band membership is judged on the **live dip's LOW** (`dip_depth`, wick-to-wick,
+same units as the historical events), never on today's close: a dip that tagged the
+band and then turned — the exact setup being hunted — bounces its close back out of
+the band, so a close-based gate mislabels the best entries as "wait".
+
 ```python
-def current_state(df, zz, sig, trigger=None):
+def current_state(df, zz, sig, trigger=None, late_rebound=0.62):
     last = df.row(df.height - 1, named=True)
-    last_high = next((p for p in reversed(zz) if p[1] == "H"), None)
-    if last_high is None:
-        return {"label": "no-match", "why": "no confirmed swing high"}
-    live = live_pullback_low(df, zz)               # Block 8b — recover edge-zone low
-    hi_idx = max(i for i, p in enumerate(zz) if p[1] == "H")
-    structural_floor = next((zz[j][2] for j in range(hi_idx - 1, -1, -1)
-                             if zz[j][1] == "L"), None)   # prior confirmed HL = deep floor
+    if not zz:
+        return {"label": "no-match", "why": "no confirmed swing structure at all"}
+    live = live_pullback_low(df, zz)          # Block 8b — anchored on the LIVE high (8a)
+    ref = live["ref_high"]                    # the real reference high
+    last_L = next((p for p in reversed(zz) if p[1] == "L"), None)
+    structural_floor = last_L[2] if last_L else None  # last confirmed higher-low
     near_term = live["live_low"] if live["live_low"] is not None else structural_floor
-    cur_depth = (last_high[2] - last["close"]) / last_high[2] * 100
-    lo, hi = sig["depth_iqr"]
-    uptrend = last["close"] > last["ema_50"] and last["ema_50"] > df["ema_50"][-20]
-    out = {"cur_depth": cur_depth, "band": sig["depth_iqr"],
-           "live_low": live["live_low"],
-           "live_low_depth": live.get("depth_from_high_pct"),
+    cur_depth = (ref["high"] - last["close"]) / ref["high"] * 100   # >= 0 by construction
+    dip_depth = live.get("depth_from_high_pct")       # the dip LOW's depth — the gate
+    lo, deep = sig["depth_iqr"][0], sig["depth_p90"]
+    structure_intact = (live["live_low"] is None or structural_floor is None
+                        or live["live_low"] > structural_floor)
+    uptrend = last["ema_50"] > df["ema_50"][-20] and structure_intact
+    rebound_frac = None                       # how much of the dip is already retraced
+    if live["live_low"] is not None and ref["high"] > live["live_low"]:
+        rebound_frac = (last["close"] - live["live_low"]) / (ref["high"] - live["live_low"])
+    out = {"cur_depth": cur_depth, "dip_depth": dip_depth, "band": sig["depth_iqr"],
+           "deep_edge": deep,
+           "ref_high": ref["high"], "ref_high_ts": ref["high_ts"],
+           "ref_high_confirmed": ref["confirmed"],
+           "live_low": live["live_low"], "live_low_depth": dip_depth,
            "near_term_invalidation": near_term,    # QUOTE THIS as the stop, not the floor
-           "structural_floor": structural_floor,   # deeper break = full trend reversal
+           "structural_floor": structural_floor,   # confirmed HL; below it = trend break
+           "rebound_frac": rebound_frac, "structure_intact": structure_intact,
            "success_rate": sig["success_rate"], "uptrend": uptrend}
-    if uptrend and lo <= cur_depth <= hi:
-        out["label"] = "buyable-dip-now"
-    elif uptrend and cur_depth < lo:
-        out["label"] = "pullback-coming/wait"
-        out["why"] = "near high, shallower than typical pullback band"
-    else:
+    if not uptrend:
         out["label"] = "no-match"
-    # turn gate: only an in-band live dip can be a buy — require the learned turn
-    if trigger is not None and out["label"] == "buyable-dip-now":
+        out["why"] = ("live low broke the confirmed higher-low (reversal, not pullback)"
+                      if not structure_intact else "ema_50 not rising — no uptrend to dip in")
+    elif dip_depth is None or dip_depth < lo:
+        out["label"] = "pullback-coming/wait"
+        out["why"] = "no dip yet as deep as its own band"
+    elif dip_depth > deep:
+        out["label"] = "dip-deeper-than-usual"
+        out["why"] = "uptrend intact but the dip exceeds its own P90 depth — atypical, caution"
+    elif rebound_frac is not None and rebound_frac > late_rebound:
+        out["label"] = "late-rebound/watch"
+        out["why"] = "dip already retraced most of the way back — buying here is a chase"
+    else:
+        out["label"] = "buyable-dip-now"
+    # turn gate: an in-band live dip is a buy ONLY once the learned turn is reproduced
+    if trigger is not None and out["label"] in ("buyable-dip-now", "dip-deeper-than-usual"):
         tr = live_turn(df, zz, trigger)            # Block 8c
         out["turn"] = tr
-        if tr["turn_learnable"] is False or tr["confirmed"] is None:
-            out["label"] = "buyable-dip-now/turn-unconfirmable"
-        elif tr["confirmed"]:
-            out["label"] = "buy-the-dip-turned"
-        else:
-            out["label"] = "wait-not-turned"
+        if out["label"] == "buyable-dip-now":
+            if tr["turn_learnable"] is False or tr["confirmed"] is None:
+                out["label"] = "buyable-dip-now/turn-unconfirmable"
+            elif tr["confirmed"]:
+                out["label"] = "buy-the-dip-turned"
+            else:
+                out["label"] = "wait-not-turned"
     return out
 ```
 
-`cur_depth` is measured off the latest close. A dip can tag the band and then bounce
-before the last bar — so also check `live_low_depth`: if it landed in the band, a
-swing low may already be in even when `cur_depth` looks shallow. The matched past
-events (their dates) are the audit trail — always list them.
+`dip_depth` (the live low, wick-to-wick off the live high) decides band membership;
+`cur_depth` (today's close) only says where price sits inside the dip. `rebound_frac`
+guards the other side: a dip that already retraced more than `late_rebound` (trader's
+fixed model knob, like the 3% stop — disclose it) is a chase, not an entry.
+`dip-deeper-than-usual` keeps the turn info attached but never upgrades to BUY — an
+atypically deep dip is evidence the character changed. The uptrend test is EMA slope
+plus intact structure, deliberately NOT `close > ema_50`: dips below the 50-EMA are
+normal (Block 5 stocks anchoring at ema_100/200 are below it by construction). The
+matched past events (their dates) are the audit trail — always list them.
+
+## Block 8a — Live swing high (the real reference high)
+
+The confirmed zigzag is blind to the current high in TWO ways: `center=True` nulls
+the last `k` bars (a fresh peak is invisible — and a fresh peak is where every new
+pullback starts), and a persistent rally prints **no H pivot at all** because each
+local max is exceeded within `k` bars — months can pass without a confirmed high.
+Measuring "depth" off that stale pivot yields negative depths on ~a third of an
+uptrending universe and mislabels real pullbacks as "near high / wait". Recover the
+real reference from raw bars: the max high after the last confirmed LOW = the top of
+the current leg.
+
+```python
+def live_swing_high(df, zz):
+    last_L = next((p for p in reversed(zz) if p[1] == "L"), None)
+    scope = df if last_L is None else df.filter(pl.col("trade_timestamp") > last_L[0])
+    if scope.height == 0:
+        raise ValueError("no bars after the last confirmed low — cannot anchor a live high")
+    i = scope["high"].arg_max()
+    high, high_ts = scope["high"][i], scope["trade_timestamp"][i]
+    last_H = next((p for p in reversed(zz) if p[1] == "H"), None)
+    return {"high": high, "high_ts": high_ts,
+            "confirmed": last_H is not None and last_H[0] == high_ts}
+```
+
+Works for both pivot orders: `…L,H` + decline → picks the confirmed H (or a higher
+edge-zone bar); `…H,L` + fresh leg → picks the current leg's raw top even though no H
+pivot exists yet. `confirmed=False` flags that the reference is an unconfirmed raw
+bar — disclose it, but never fall back to the stale pivot.
 
 When a `trigger` (Block 7b) is passed, the `buyable-dip-now` state is split by the live turn
 (Block 8c): `buy-the-dip-turned` (the dip reproduced the stock's learned trigger — a buy),
@@ -319,23 +383,24 @@ Without a `trigger` the original `buyable-dip-now` label is unchanged (backward 
 
 The confirmed zigzag CANNOT see the most recent swing: `center=True` nulls the last
 `k` bars, so the latest higher-low sits in the unconfirmable edge zone. **Invalidation
-must NOT be read off confirmed pivots alone** — scan raw bars since the last confirmed
-high to recover the live higher-low. This is resolution-independent (reads raw lows),
-so it finds the recent bottom regardless of `k` — no need to re-run at a finer `k`.
+must NOT be read off confirmed pivots alone** — scan raw bars since the LIVE swing
+high (Block 8a, never the stale confirmed pivot: scanning from a months-old confirmed
+high returns a months-old "live low" and a garbage stop) to recover the live
+higher-low. This is resolution-independent (reads raw lows), so it finds the recent
+bottom regardless of `k` — no need to re-run at a finer `k`.
 
 ```python
 def live_pullback_low(df, zz):
-    last_high = next((p for p in reversed(zz) if p[1] == "H"), None)
-    if last_high is None:
-        raise ValueError("no confirmed swing high")
-    since = df.filter(pl.col("trade_timestamp") > last_high[0])
+    ref = live_swing_high(df, zz)                  # Block 8a — the real reference high
+    since = df.filter(pl.col("trade_timestamp") > ref["high_ts"])
     if since.height == 0:
-        return {"live_low": None}            # high is the last bar; nothing formed yet
+        return {"live_low": None, "ref_high": ref}   # the high IS the last bar; no dip yet
     i = since["low"].arg_min()
     return {
         "live_low": since["low"][i],
         "live_low_ts": since["trade_timestamp"][i],
-        "depth_from_high_pct": (last_high[2] - since["low"][i]) / last_high[2] * 100,
+        "depth_from_high_pct": (ref["high"] - since["low"][i]) / ref["high"] * 100,
+        "ref_high": ref,
     }
 ```
 
@@ -399,8 +464,8 @@ def live_turn(df, zz, trigger):
 ```
 
 A fresh-low last bar gives `cur_lift ≈ 0` and no reclaim → `confirmed=False` (the knife,
-correctly held back). "Already bounced far past the trigger" is NOT decided here — it stays
-with the existing now-off-high ≤ 0 / WATCH handling (Block 8 / Stage C).
+correctly held back). "Already bounced far past the trigger" is NOT decided here — Block 8's
+`rebound_frac` / `late-rebound/watch` label handles it.
 
 ## Block 9 — Universe gate (Stage-1 screener)
 
@@ -408,7 +473,7 @@ Cheap, fully vectorized posture check over the whole universe; deep per-stock
 analysis (Blocks 1–8) runs only on survivors.
 
 ```python
-def universe_gate(interval="1d", lookback=20):
+def universe_gate(interval="1d", lookback=20, high_lookback=60):
     lf = (pl.scan_parquet(f"market-data/prices/{interval}/*.parquet")
           .select("symbol","trade_timestamp","high","close")
           .sort("symbol","trade_timestamp"))
@@ -416,14 +481,19 @@ def universe_gate(interval="1d", lookback=20):
             pl.col("close").last().alias("close"),
             pl.col("close").ewm_mean(span=50, adjust=False).last().alias("ema_50"),
             pl.col("close").ewm_mean(span=50, adjust=False).slice(-lookback,1).first().alias("ema_50_prev"),
-            pl.col("high").tail(lookback).max().alias("recent_high"),
+            pl.col("high").tail(high_lookback).max().alias("recent_high"),
             pl.len().alias("bars"),
         ]))
     out = (g.filter(pl.col("bars") >= 60)
             .with_columns(((pl.col("recent_high")-pl.col("close"))/pl.col("recent_high")*100).alias("depth"))
-            .filter((pl.col("close") > pl.col("ema_50")) & (pl.col("ema_50") > pl.col("ema_50_prev")))
+            .filter(pl.col("ema_50") > pl.col("ema_50_prev"))
             .collect(engine="streaming"))
-    return out  # symbols in an uptrend; sort/slice by depth to pick dippers
+    return out  # rising-EMA symbols; sort/slice by depth to pick dippers
 ```
 
-`bars >= 60` drops names too short to judge — disclose how many were excluded.
+The gate is a rising-EMA posture check ONLY — deliberately NOT `close > ema_50`,
+which silently drops every name currently below its 50-EMA mid-pullback, i.e. the
+exact stocks the screen exists to find (Blocks 2–8 on the survivors do the real
+judging). `recent_high` uses a longer window than the slope check so a multi-week dip
+still measures against its real top. `bars >= 60` drops names too short to judge —
+disclose how many were excluded.

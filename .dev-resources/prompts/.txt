@@ -315,3 +315,9 @@ hourly - close > ema20 > ema50 > ema 100 > ema 200
 hourly - Out of the filtered stocks which are the most likely to take support from ema10, ema20 or ema50 and bounces back
 
 ------------------------
+
+Now use pullback-finder skill to make entry and exit. 
+Design a risk management strategy for max profit and minimum drawdown - a good balance.
+Backtest on daily and hourly data using talk-to-parquet skill.
+
+For entry and exit if you need you can think of any other strategy also not necessarily pullback-finder to check to maximize gains and minimize drawdown.
